@@ -5,22 +5,23 @@ let
             allowUnfree = true;
         };
 
-        overlays = [ # Modify Python library to have overrides
-
-            (
-                final: prev: rec {
-                python312 = prev.python312.override {
-                    self = python312;
-                    packageOverrides = final_: prev_: {
-                    transformers = prev_.transformers.override {
-                        torch = final_.torch-bin; # Change the torch library referenced in transformers to torch-bin (precompiled)
-                    };
-                    };
-                };
-            }
-            )
-
-        ];};
+#         overlays = [ # Modify Python library to have overrides
+#
+#             (
+#                 final: prev: rec {
+#                 python312 = prev.python312.override {
+#                     self = python312;
+#                     packageOverrides = final_: prev_: {
+#                     transformers = prev_.transformers.override {
+#                         torch = final_.torch-bin; # Change the torch library referenced in transformers to torch-bin (precompiled)
+#                     };
+#                     };
+#                 };
+#             }
+#             )
+#
+#         ];
+};
 in
 pkgs.mkShell {
     buildInputs = with pkgs; [
@@ -30,16 +31,16 @@ pkgs.mkShell {
             pip
             numpy
             pandas
-            torch
-            torchvision
-            torchaudio
+            torch-bin
+            torchvision-bin
+            torchaudio-bin
             tqdm
 #             bitsandbytes
             transformers
 #             peft
-            accelerate
+#             accelerate
             datasets
-            scipy
+#             scipy
 #             einops
 #             evaluate
 #             trl
