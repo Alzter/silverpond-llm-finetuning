@@ -1,3 +1,7 @@
+# Add Unsloth and trl to nixpkgs
+# 
+# Source: Hugo Herter (git@hugoherter.com)
+# Taken from: https://github.com/NixOS/nixpkgs/pull/388735/files
 {
   lib,
   buildPythonPackage,

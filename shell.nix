@@ -20,6 +20,10 @@ let
                           torchvision = final_.torchvision-bin;
                           torchaudio = final_.torchaudio-bin;
                           trl = final_.callPackage ./python-modules/trl/default.nix { };
+#                           unsloth = final_.callPackage ./python-modules/unsloth/default.nix { };
+#                           unsloth-zoo = final_.callPackage ./python-modules/unsloth-zoo/default.nix { };
+#                           tyro = final_.callPackage ./python-modules/tyro/default.nix { };
+#                           cut-cross-entropy = final_.callPackage ./python-modules/cut-cross-entropy/default.nix { };
                         };
                     };
                 }
@@ -47,6 +51,10 @@ pkgs.mkShell {
             accelerate
             datasets
             trl
+#             tyro
+#             cut-cross-entropy
+#             unsloth
+#             unsloth-zoo
 #             scipy
 #             einops
 #             evaluate
