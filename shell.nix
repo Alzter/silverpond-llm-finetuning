@@ -35,9 +35,9 @@ pkgs.mkShell {
             pip
             numpy
             pandas
-#            torch-bin
-#            torchvision-bin
-#            torchaudio-bin
+            torch
+            torchvision
+            torchaudio
             tqdm
             matplotlib
             bitsandbytes
