@@ -5,23 +5,20 @@ let
             allowUnfree = true;
         };
 
-         overlays = [ # Modify Python library to have overrides
-           (
-             final: prev: rec {
-               python312 = prev.python312.override {
-                 self = python312;
-                 packageOverrides = final_: prev_: {
-                 torch = final_.torch-bin;
-                 torchvision = final_.torchvision-bin;
-                 torchaudio = final_.torchaudio-bin;
-                   accelerate = prev_.accelerate.override {
-                     torch = final_.torch-bin; # Change the torch library referenced in accelerate to torch-bin (precompiled)
-                   };
-                 };
-               };
-             }
-           )
-         ];
+#          overlays = [ # Modify Python library to have overrides
+#            (
+#              final: prev: rec {
+#                python312 = prev.python312.override {
+#                  self = python312;
+#                  packageOverrides = final_: prev_: {
+#                  torch = final_.torch-bin;
+#                  torchvision = final_.torchvision-bin;
+#                  torchaudio = final_.torchaudio-bin;
+#                  };
+#                };
+#              }
+#            )
+#          ];
 };
 in
 pkgs.mkShell {
