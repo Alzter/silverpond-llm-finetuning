@@ -19,6 +19,7 @@ let
                           });
                           torchvision = final_.torchvision-bin;
                           torchaudio = final_.torchaudio-bin;
+                          trl = final_.callPackage ./python-modules/trl/default.nix { };
                         };
                     };
                 }
@@ -45,7 +46,7 @@ pkgs.mkShell {
             peft
             accelerate
             datasets
-#             trl
+            trl
 #             scipy
 #             einops
 #             evaluate
