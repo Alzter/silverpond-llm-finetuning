@@ -1,26 +1,24 @@
 let
     pkgs = import <nixpkgs> {
         config = {
-            enableCuda = false;
+            enableCuda = true;
             allowUnfree = true;
         };
 
-#         overlays = [ # Modify Python library to have overrides
-#
-#             (
-#                 final: prev: rec {
-#                 python312 = prev.python312.override {
-#                     self = python312;
-#                     packageOverrides = final_: prev_: {
-#                     transformers = prev_.transformers.override {
-#                         torch = final_.torch-bin; # Change the torch library referenced in transformers to torch-bin (precompiled)
-#                     };
-#                     };
-#                 };
-#             }
-#             )
-#
-#         ];
+#          overlays = [ # Modify Python library to have overrides
+#            (
+#              final: prev: rec {
+#                python312 = prev.python312.override {
+#                  self = python312;
+#                  packageOverrides = final_: prev_: {
+#                    accelerate = prev_.accelerate.override {
+#                      torch = final_.torch-bin; # Change the torch library referenced in transformers to torch-bin (precompiled)
+#                    };
+#                  };
+#                };
+#              }
+#            )
+#          ];
 };
 in
 pkgs.mkShell {
@@ -31,19 +29,20 @@ pkgs.mkShell {
             pip
             numpy
             pandas
-            torch-bin
-            torchvision-bin
-            torchaudio-bin
+#            torch-bin
+#            torchvision-bin
+#            torchaudio-bin
             tqdm
-#             bitsandbytes
+            matplotlib
+            bitsandbytes
             transformers
-#             peft
-#             accelerate
+            peft
+            accelerate
             datasets
+#             trl
 #             scipy
 #             einops
 #             evaluate
-#             trl
 #             rouge_score
         ]
         ))
