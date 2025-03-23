@@ -51,6 +51,7 @@ pkgs.mkShell {
             accelerate
             datasets
             trl
+            scikit-learn
 #             tyro
 #             cut-cross-entropy
 #             unsloth
