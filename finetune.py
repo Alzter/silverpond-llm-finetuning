@@ -1,4 +1,4 @@
-from datasets import Dataset, Value, ClassLabel
+from datasets import Dataset, Value, ClassLabel, DatasetDict
 import numpy as np
 
 def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed:int=0) -> Dataset:
@@ -104,12 +104,12 @@ def _label_to_string(sample : dict, class_label_names : list) -> dict:
     sample['completion'] = class_label_names[ int(sample['completion']) ]
     return sample
 
-def preprocess_dataset(dataset : Dataset, text_column : str, labels_column : str) -> Dataset:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str) -> Dataset:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
     Args:
-        dataset (Dataset): A supervised text-classification dataset.
+        dataset (Dataset | DatasetDict): A supervised text-classification dataset.
         text_column (str): The column name for the input text column (X).
         labels_column (str): The column name for the output label column (y).
     
@@ -117,15 +117,19 @@ def preprocess_dataset(dataset : Dataset, text_column : str, labels_column : str
         Dataset: The dataset in conversational format.
     """
 
-    columns = list(dataset.features.keys())
+    # If the dataset is actually a container of datasets,
+    # use recursion to preprocess all sub-datasets
+    if type(dataset) is DatasetDict:
+        for subset in dataset.keys():
+            dataset[subset] = preprocess_dataset(dataset[subset], text_column=text_column, labels_column=labels_column)
+        return dataset
 
-    # Remove all columns which aren't the sample or label
-    columns_to_remove = list(set(columns) - set([text_column,labels_column]))
-    dataset.remove_columns(columns_to_remove)
+    # Select only the text and label columns.
+    dataset = dataset.select_columns([text_column,labels_column])
 
-    # Convert the dataset into prompt/completion format
-    dataset.rename_column(text_column, "prompt")
-    dataset.rename_column(labels_column, "completion")
+    # Convert the dataset into prompt/completion format.
+    dataset = dataset.rename_column(text_column, "prompt")
+    dataset = dataset.rename_column(labels_column, "completion")
 
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
