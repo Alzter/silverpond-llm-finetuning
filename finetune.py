@@ -44,6 +44,13 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         Dataset: The sample of the dataset.
     """
 
+    # If the dataset is actually a container of datasets,
+    # use recursion to preprocess all sub-datasets
+    if type(dataset) is DatasetDict:
+        for subset in dataset.keys():
+            dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class)
+        return dataset
+
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
 
@@ -121,7 +128,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
-            dataset[subset] = preprocess_dataset(dataset[subset], text_column=text_column, labels_column=labels_column)
+            dataset[subset] = preprocess_dataset(dataset[subset], text_column, labels_column)
         return dataset
 
     # Select only the text and label columns.

@@ -1,6 +1,7 @@
 import pytest
 import finetune as ft
 from datasets import load_dataset, ClassLabel
+import numpy as np
 
 @pytest.fixture()
 def full_dataset():
@@ -9,6 +10,31 @@ def full_dataset():
 @pytest.fixture
 def test_dataset():
     return load_dataset("fancyzhx/dbpedia_14", split="test")
+
+def test_resize_datadict(full_dataset):
+    size = np.array(list(full_dataset.shape.values()))[:,0]
+
+    sample = ft.sample_dataset(full_dataset, ratio=0.5)
+
+    new_size = np.array(list(sample.shape.values()))[:,0]
+
+    assert np.array_equal(size // 2, new_size)
+
+def test_resize_dataset(test_dataset):
+    size = len(test_dataset)
+
+    sample_ratio = ft.sample_dataset(test_dataset, ratio=0.5)
+    assert len(sample_ratio) == size // 2
+
+    sample_size = ft.sample_dataset(test_dataset, size=1400)
+    assert len(sample_size) == 1400
+
+    sample_per_class = ft.sample_dataset(test_dataset, samples_per_class=10)
+    assert len(sample_per_class) == 14 * 10
+
+def test_resize_dataset_requires_method(test_dataset):
+    with pytest.raises(ValueError):
+        ft.sample_dataset(test_dataset)
 
 def test_preprocess_datadict(full_dataset):
     subsets = ["train", "test"]
