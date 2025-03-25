@@ -1,4 +1,7 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import lora_config
+from trl import SFTConfig, SFTTrainer
 import numpy as np
 
 def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed:int=0) -> Dataset:
@@ -152,3 +155,26 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
 
     return dataset
 
+def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
+    """_summary_
+
+    Args:
+        model (AutoModelForCausalLM): _description_
+        tokenizer (AutoTokenizer): _description_
+        train_dataset (Dataset): _description_
+        lora_config (LoraConfig): _description_
+        sft_config (SFTConfig): _description_
+        save_directory (str): _description_
+    """
+    model = prepare_model_for_kbit_training(model)
+    model = get_peft_model(model, lora_config)
+
+    trainer = SFTTrainer(
+        model=model,
+        processing_class=tokenizer,
+        args=sft_config,
+        train_dataset=train_dataset,
+    )
+
+    trainer.train()
+    trainer.save_model(save_directory)
