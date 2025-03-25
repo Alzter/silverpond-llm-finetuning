@@ -52,6 +52,7 @@ pkgs.mkShell {
             datasets
             trl
             scikit-learn
+            pytest
 #             tyro
 #             cut-cross-entropy
 #             unsloth
