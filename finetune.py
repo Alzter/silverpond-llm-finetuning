@@ -1,6 +1,6 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import lora_config
+from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 import numpy as np
 
@@ -114,7 +114,7 @@ def _label_to_string(sample : dict, class_label_names : list) -> dict:
     sample['completion'] = class_label_names[ int(sample['completion']) ]
     return sample
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str) -> Dataset:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str) -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
@@ -124,15 +124,16 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
         labels_column (str): The column name for the output label column (y).
     
     Returns:
-        Dataset: The dataset in conversational format.
+        formatted_dataset (Dataset): The dataset in conversational format.
+        class_labels (list): The list of class label names.
     """
 
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
-            dataset[subset] = preprocess_dataset(dataset[subset], text_column, labels_column)
-        return dataset
+            dataset[subset], label_names = preprocess_dataset(dataset[subset], text_column, labels_column)
+        return dataset, label_names
 
     # Select only the text and label columns.
     dataset = dataset.select_columns([text_column,labels_column])
@@ -141,10 +142,11 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     dataset = dataset.rename_column(text_column, "prompt")
     dataset = dataset.rename_column(labels_column, "completion")
 
+    label_names = dataset.features['completion'].names
+
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
 
-        label_names = dataset.features['completion'].names
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
         # Replace all class label IDs with label names.
@@ -153,7 +155,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
 
-    return dataset
+    return dataset, label_names
 
 def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
     """_summary_
@@ -178,3 +180,76 @@ def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, trai
 
     trainer.train()
     trainer.save_model(save_directory)
+
+def _generate_model_prompt(prompt : str, tokenizer : AutoTokenizer) -> str:
+    """_summary_
+
+    Args:
+        prompt (str): _description_
+        tokenizer (AutoTokenizer): _description_
+
+    Returns:
+        str: _description_
+    """
+    if type(sentence) is str:
+        sentence = [{"role": "user", "content": sentence}]
+    prompt = tokenizer.apply_chat_template(
+        sentence, tokenize=False, add_generation_prompt=True
+    )
+    return prompt
+
+def generate(
+    prompt : str | dict,
+    model : AutoModelForCausalLM,
+    tokenizer : AutoTokenizer,
+    max_new_tokens : int = 64,
+    skip_special_tokens : bool = True,
+    response_only : bool = True,
+    do_sample : bool = True,
+    temperature : float = 0.1
+    ) -> str:
+    """_summary_
+
+    Args:
+        prompt (str | dict): _description_
+        model (AutoModelForCausalLM): _description_
+        tokenizer (AutoTokenizer): _description_
+        max_new_tokens (int, optional): _description_. Defaults to 64.
+        skip_special_tokens (bool, optional): _description_. Defaults to True.
+        response_only (bool, optional): _description_. Defaults to True.
+        do_sample (bool, optional): _description_. Defaults to True.
+        temperature (float, optional): _description_. Defaults to 0.1.
+
+    Returns:
+        str: _description_
+    """
+
+    # Convert user query into a formatted prompt
+    prompt = _generate_model_prompt(prompt, tokenizer=tokenizer)
+
+    # Tokenize the formatted prompt
+    tokenized_input = tokenizer(prompt,
+                                add_special_tokens=False,
+                                return_tensors="pt").to(model.device)
+    model.eval()
+
+    # Generate the response
+    generation_output = model.generate(**tokenized_input,
+                                       max_new_tokens=max_new_tokens,
+                                       do_sample=do_sample,
+                                       temperature=temperature)
+
+    # If required, removes the tokens belonging to the prompt
+    if response_only:
+        input_length = tokenized_input['input_ids'].shape[1]
+        generation_output = generation_output[:, input_length:]
+    
+    # Decodes the tokens back into text
+    output = tokenizer.batch_decode(generation_output, 
+                                    skip_special_tokens=skip_special_tokens)[0]
+    return output
+
+
+
+    
+

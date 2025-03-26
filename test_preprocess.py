@@ -36,9 +36,19 @@ def test_resize_dataset_requires_method(test_dataset):
     with pytest.raises(ValueError):
         ft.sample_dataset(test_dataset)
 
+def test_resize_dataset_has_no_side_effects(test_dataset):
+    expected = len(test_dataset)
+
+    ft.sample_dataset(test_dataset, ratio=0.1)
+
+    actual = len(test_dataset)
+
+    assert expected == actual, "There should be no side effects from resizing a dataset"
+
 def test_preprocess_datadict(full_dataset):
     subsets = ["train", "test"]
-    processed_datadict = ft.preprocess_dataset(full_dataset, "content", "label")
+    full_dataset = ft.sample_dataset(full_dataset, samples_per_class=10)
+    processed_datadict, _ = ft.preprocess_dataset(full_dataset, "content", "label")
 
     for subset in subsets:
         assert processed_datadict[subset].column_names == ["messages"]
@@ -52,10 +62,25 @@ def test_preprocess_dataset(test_dataset):
         label_names = test_dataset.features['label'].names
         labels = [label_names[label] for label in labels]
 
-    processed_dataset = ft.preprocess_dataset(test_dataset, "content", "label")
+    processed_dataset, _ = ft.preprocess_dataset(test_dataset, "content", "label")
 
     assert processed_dataset.column_names == ["messages"], "Dataset must be in conversational format"
 
     assert samples == [message[0]['content'] for message in processed_dataset['messages']], "The content of the pre-processed dataset should be identical"
     assert labels == [message[-1]['content'] for message in processed_dataset['messages']], "The content of the pre-processed dataset should be identical"
-    
+
+def test_preprocess_dataset_no_side_effects(test_dataset):
+    expected = test_dataset.column_names
+
+    ft.preprocess_dataset(test_dataset, "content", "label")
+
+    actual = test_dataset.column_names
+
+    assert expected == actual, "There should be no side effects from resizing a dataset"
+
+def test_get_class_labels(test_dataset):
+
+    expected = test_dataset.features['label'].names
+    _, actual = ft.preprocess_dataset(test_dataset, "content", "label")
+
+    assert expected == actual, "A list of class label names should be returned when preprocessing a dataset."
