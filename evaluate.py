@@ -148,7 +148,7 @@ def evaluate(
         label_names=label_names,
         llm_responses=llm_responses)
 
-def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> DataFrame:
+def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.DataFrame:
 
     # Cast labels from int (class ID) -> str (class name)
     y_pred = [label_names[id] for id in result.y_pred]
