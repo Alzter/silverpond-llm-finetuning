@@ -18,11 +18,11 @@ class EvaluationConfig:
 @dataclass
 class EvaluationResult:
     config : EvaluationConfig
-    texts : list(str)
-    labels_pred : list(int)
-    labels_true : list(int)
-    label_names : list(str)
-    llm_responses : list(str)
+    texts : list[str]
+    labels_pred : list[int]
+    labels_true : list[int]
+    label_names : list[str]
+    llm_responses : list[str]
 
 def _get_class_id_from_string(string, label_names : list) -> int:
     """_summary_
