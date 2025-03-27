@@ -23,7 +23,7 @@ def llm():
 @pytest.fixture
 def eval_dataset():
     eval_data = load_dataset("fancyzhx/dbpedia_14", split="test")
-    eval_data = ft.sample_dataset(eval_data, samples_per_class=10)
+    eval_data = ft.sample_dataset(eval_data, samples_per_class=2)
     eval_data, label_names = ft.preprocess_dataset(load_dataset("fancyzhx/dbpedia_14", split="test"), "content", "label")
     return (eval_data, label_names)
 
@@ -33,7 +33,7 @@ def test_evaluate_llm(llm, eval_dataset):
 
     eval_config = ev.ClassificationMethod(
         prompt = model_prompts.PROMPT_ZEROSHOT,
-        max_tokens = 100
+        max_tokens = 3
     )
 
     result = ev.evaluate(

@@ -17,8 +17,8 @@ CATEGORIES:
 12. Film
 13. WrittenWork
 
-Read the following article, then answer with the name of the category which suits it best.
-ONLY include the category name in your answer.
+Read the following article then answer with the name of the category which suits it best.
+Answer with ONLY the name of the category.
 """
 
 # Zero-shot chain-of-thought prompt to classify articles and return their category name.
