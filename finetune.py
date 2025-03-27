@@ -1,5 +1,5 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 import numpy as np
@@ -158,15 +158,15 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     return dataset, label_names
 
 def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
-    """_summary_
+    """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
-        model (AutoModelForCausalLM): _description_
-        tokenizer (AutoTokenizer): _description_
-        train_dataset (Dataset): _description_
-        lora_config (LoraConfig): _description_
-        sft_config (SFTConfig): _description_
-        save_directory (str): _description_
+        model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+        train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset`` before calling this method.
+        lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
+        sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
+        save_directory (str): Where to save the fine-tuned model to.
     """
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
@@ -181,21 +181,53 @@ def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, trai
     trainer.train()
     trainer.save_model(save_directory)
 
-def _generate_model_prompt(prompt : str, tokenizer : AutoTokenizer) -> str:
-    """_summary_
+def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0") -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
+    """
+    Load a finetuned LLM from disk.
 
     Args:
-        prompt (str): _description_
-        tokenizer (AutoTokenizer): _description_
+        model_directory (str): Where to load the fine-tuned model.
+        device_map (_type_, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
 
     Returns:
-        str: _description_
+        model (AutoPeftModelForCausalLM): The fine-tuned LLM.
+        tokenizer (AutoTokenizer): The tokenizer (unchanged from the base model).
     """
-    if type(sentence) is str:
-        sentence = [{"role": "user", "content": sentence}]
-    prompt = tokenizer.apply_chat_template(
-        sentence, tokenize=False, add_generation_prompt=True
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=False,
+        bnb_4bit_compute_dtype=torch.float16
     )
+    config = PeftConfig.from_pretrained(model_path)
+
+    tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
+    model = AutoPeftModelForCausalLM.from_pretrained(model_path, device_map=device_map, quantization_config=bnb_config)
+
+    return (model, tokenizer)
+
+def _format_prompt(prompt : str | dict, tokenizer : AutoTokenizer) -> str:
+    """
+    Convert an LLM prompt into string format with a chat template
+    and special tokens.
+
+    Args:
+        prompt (str | dict): The prompt for the LLM.
+                            You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                            if you want to include a system prompt and/or prior chat history.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+
+    Returns:
+        prompt (str): The prompt with chat template applied converted to string format using special tokens.
+    """
+    if type(prompt) is str:
+        prompt = [{"role": "user", "content": prompt}]
+    
+    prompt = tokenizer.apply_chat_template(
+        prompt, tokenize=False, add_generation_prompt=True
+    )
+
     return prompt
 
 def generate(
@@ -203,29 +235,28 @@ def generate(
     model : AutoModelForCausalLM,
     tokenizer : AutoTokenizer,
     max_new_tokens : int = 64,
-    skip_special_tokens : bool = True,
-    response_only : bool = True,
     do_sample : bool = True,
     temperature : float = 0.1
     ) -> str:
-    """_summary_
+    """
+    Generate an LLM response to a given query.
 
     Args:
-        prompt (str | dict): _description_
-        model (AutoModelForCausalLM): _description_
-        tokenizer (AutoTokenizer): _description_
-        max_new_tokens (int, optional): _description_. Defaults to 64.
-        skip_special_tokens (bool, optional): _description_. Defaults to True.
-        response_only (bool, optional): _description_. Defaults to True.
-        do_sample (bool, optional): _description_. Defaults to True.
-        temperature (float, optional): _description_. Defaults to 0.1.
+        prompt (str | dict): The prompt for the LLM.
+                            You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                            if you want to include a system prompt and/or prior chat history.
+        model (AutoModelForCausalLM): The LLM to use. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+        max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+        do_sample (bool, optional): If true, disables deterministic generation. Defaults to True.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.1.
 
     Returns:
-        str: _description_
+        response (str): The LLM's response.
     """
 
     # Convert user query into a formatted prompt
-    prompt = _generate_model_prompt(prompt, tokenizer=tokenizer)
+    prompt = _format_prompt(prompt, tokenizer=tokenizer)
 
     # Tokenize the formatted prompt
     tokenized_input = tokenizer(prompt,
@@ -239,14 +270,13 @@ def generate(
                                        do_sample=do_sample,
                                        temperature=temperature)
 
-    # If required, removes the tokens belonging to the prompt
-    if response_only:
-        input_length = tokenized_input['input_ids'].shape[1]
-        generation_output = generation_output[:, input_length:]
+    # If required, remove the tokens belonging to the prompt
+    #if response_only:
+    input_length = tokenized_input['input_ids'].shape[1]
+    generation_output = generation_output[:, input_length:]
     
-    # Decodes the tokens back into text
-    output = tokenizer.batch_decode(generation_output, 
-                                    skip_special_tokens=skip_special_tokens)[0]
+    # Decode the tokens back into text
+    output = tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
     return output
 
 
