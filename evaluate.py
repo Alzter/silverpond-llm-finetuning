@@ -22,7 +22,7 @@ class ClassificationMethod:
                           you can set this value to 1. The LLM will only return the first few
                           letters of the class label, but this is usually enough to identify
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
-        llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
+        prompt (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
     max_tokens : int
     prompt : str | None = None
@@ -159,11 +159,11 @@ def evaluate(
         
         # Generate a classification prompt for the sample
         prompt = [
-            {"role":"system", "content":eval_config.llm_instructions},
+            {"role":"system", "content":eval_config.prompt},
             {"role":"user", "content":text}
         ]
         # Remove the system prompt from the chat template if none was specified
-        if eval_config.llm_instructions is None or eval_config.llm_instructions == "":
+        if eval_config.prompt is None or eval_config.prompt == "":
             prompt.pop(0)
 
         # Get the LLM to generate an answer
