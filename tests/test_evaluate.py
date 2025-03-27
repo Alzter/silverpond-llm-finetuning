@@ -33,7 +33,7 @@ def test_evaluate_llm(llm, eval_dataset):
 
     eval_config = ev.ClassificationMethod(
         max_tokens = 100,
-        llm_instructions = model_prompts.PROMPT_ZEROSHOT
+        prompt = model_prompts.PROMPT_ZEROSHOT
     )
 
     result = ev.evaluate(

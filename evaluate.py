@@ -21,7 +21,7 @@ class ClassificationMethod:
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
                           letters of the class label, but this is usually enough to identify
-                          which label it selected.
+                          which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
         llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
     max_tokens : int
