@@ -9,17 +9,26 @@ import pandas as pd
 import numpy as np
 
 @dataclass
-class EvaluationConfig:
+class ClassificationMethod:
     """
+    Defines how LLMs should be instructed to classify each text sample in a classification dataset.
+    You can specify different configurations for different prompting techniques.
+
+    NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
 
     Args:
-        name (str):
-        max_tokens (int):
-        llm_instructions (str, optional):
+        name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned"
+                    This name is used on the evaluation results.
+        max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
+                          If you are planning on having your LLM output *just* the class label,
+                          you can set this value to 1. The LLM will only return the first few
+                          letters of the class label, but this is usually enough to identify
+                          which label it selected.
+        llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
     name : str
     max_tokens : int
-    llm_instructions : str | None
+    prompt : str | None = None
     # extractor_method : func
 
 @dataclass
@@ -28,14 +37,14 @@ class EvaluationResult:
     Raw LLM text classification evaluation results.
 
     Args:
-        config (EvaluationConfig): 
+        config (ClassificationMethod): 
         texts (list[str]): 
         labels_pred (list[int]): 
         labels_true (list[int]): 
         label_names (list[str]): 
         llm_responses (list[str]): 
     """
-    config : EvaluationConfig
+    config : ClassificationMethod
     texts : list[str]
     labels_pred : list[int]
     labels_true : list[int]
@@ -121,7 +130,7 @@ def evaluate(
     tokenizer : AutoTokenizer,
     label_names : list,
     eval_dataset : Dataset,
-    eval_config : EvaluationConfig
+    eval_config : ClassificationMethod
     ) -> EvaluationResult:
     """
     Evaluate an LLM's text classification performance on a supervised dataset.
@@ -131,7 +140,7 @@ def evaluate(
         tokenizer (AutoTokenizer): The tokenizer to use. This should come with the LLM.
         label_names (list): The name of each class label in the evaluation dataset.
         eval_dataset (Dataset): The evaluation dataset. Must be preprocessed (see ``finetune.preprocess_dataset()``).
-        eval_config (EvaluationConfig): Controls the evaluation method, including what instructions to give to the LLM to classify each sample.
+        eval_config (ClassificationMethod): Controls what instructions to give to the LLM to classify each sample.
 
     Returns:
         EvaluationResult: Raw evaluation data, including all samples, predicted/actual labels, and the LLM's response for each sample.
@@ -215,9 +224,9 @@ def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.
     return answers
     
 
-def save_evaluation_result(result : EvaluationResult, output_dir : str) -> None:
+def save_evaluation_result(result : EvaluationResult, output_dir : str = os.path.join("output", result.config.name)) -> None:
     """
-    Creates human-readable output from raw LLM evaluation data.
+    Creates human-readable results from raw LLM evaluation data.
 
     The following files are produced by this method:
 
@@ -232,9 +241,9 @@ def save_evaluation_result(result : EvaluationResult, output_dir : str) -> None:
 
     Args:
         result (EvaluationResult): The raw LLM evaluation data produced from ``evaluate()``.
-        output_dir (str): Where to save the results to.
+        output_dir (str): Which folder to save the results in. Defaults to ``output/<configuration_name>``.
     """
-    shutil.rmtree(output_dir)
+    # shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
     # Calculate accuracy, precision, recall, and F1 score

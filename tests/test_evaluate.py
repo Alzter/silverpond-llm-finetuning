@@ -31,7 +31,7 @@ def test_evaluate_llm(llm, eval_dataset):
     model, tokenizer = llm
     label_names, eval_data = eval_dataset
 
-    evaluation_config = ev.EvaluationConfig(
+    eval_config = ev.ClassificationMethod(
         name = "Chain-of-Thought",
         max_tokens = 100,
         llm_instructions = model_prompts.PROMPT_ZEROSHOT
@@ -41,7 +41,7 @@ def test_evaluate_llm(llm, eval_dataset):
         model, tokenizer,
         label_names=label_names,
         eval_dataset=eval_data,
-        evaluation_config=None
+        eval_config=eval_config
     )
 
 
