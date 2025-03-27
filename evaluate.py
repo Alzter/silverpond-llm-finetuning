@@ -5,6 +5,7 @@ import os, shutil
 from tqdm.notebook import tqdm
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
 from matplotlib import pyplot as plt
+import finetune as ft
 import pandas as pd
 import numpy as np
 
