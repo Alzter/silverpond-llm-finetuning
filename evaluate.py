@@ -17,15 +17,15 @@ class ClassificationMethod:
     NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
 
     Args:
+        llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
         max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
                           letters of the class label, but this is usually enough to identify
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
-        llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
-    max_tokens : int
     prompt : str | None = None
+    max_tokens : int
     # extractor_method : func
 
 @dataclass

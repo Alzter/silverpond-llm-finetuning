@@ -24,16 +24,16 @@ def llm():
 def eval_dataset():
     eval_data = load_dataset("fancyzhx/dbpedia_14", split="test")
     eval_data = ft.sample_dataset(eval_data, samples_per_class=10)
-    label_names, eval_data = ft.preprocess_dataset(load_dataset("fancyzhx/dbpedia_14", split="test"), "content", "label")
-    return (label_names, eval_data)
+    eval_data, label_names = ft.preprocess_dataset(load_dataset("fancyzhx/dbpedia_14", split="test"), "content", "label")
+    return (eval_data, label_names)
 
 def test_evaluate_llm(llm, eval_dataset):
     model, tokenizer = llm
-    label_names, eval_data = eval_dataset
+    eval_data, label_names = eval_dataset
 
     eval_config = ev.ClassificationMethod(
-        max_tokens = 100,
-        prompt = model_prompts.PROMPT_ZEROSHOT
+        prompt = model_prompts.PROMPT_ZEROSHOT,
+        max_tokens = 100
     )
 
     result = ev.evaluate(
