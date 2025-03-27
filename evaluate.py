@@ -207,7 +207,7 @@ def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.
     y_true = [result.label_names[id] for id in result.labels_true]
     
     answers = {
-      "Text" : np.array(result.texts)[mask],
+      "Text" : np.array(result.texts),
       "Predicted Label" : np.array(y_pred),
       "True Label" : np.array(y_true),
       "LLM Response" : np.array(result.llm_responses)
