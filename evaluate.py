@@ -184,7 +184,7 @@ def evaluate(
     labels_true = [_get_class_id_from_model_response(label, label_names) for label in groundtruth]
 
     return EvaluationResult(
-        config=config,
+        config=eval_config,
         texts=texts,
         labels_pred=labels_pred,
         labels_true=labels_true,
