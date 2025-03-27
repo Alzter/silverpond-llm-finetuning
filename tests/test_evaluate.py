@@ -39,7 +39,7 @@ def test_evaluate_llm(llm, eval_dataset):
 
     result = ev.evaluate(
         model, tokenizer,
-        class_labels=label_names,
+        label_names=label_names,
         eval_dataset=eval_data,
         evaluation_config=None
     )
