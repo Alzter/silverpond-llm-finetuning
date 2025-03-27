@@ -203,8 +203,8 @@ def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.
         pd.DataFrame: A table containing each sample in the evaluation dataset, the LLM's response to each sample, and the predicted/actual labels.
     """
     # Cast labels from int (class ID) -> str (class name)
-    y_pred = [label_names[id] for id in result.labels_pred]
-    y_true = [label_names[id] for id in result.labels_true]
+    y_pred = [result.label_names[id] for id in result.labels_pred]
+    y_true = [result.label_names[id] for id in result.labels_true]
     
     answers = {
       "Text" : np.array(result.texts)[mask],
