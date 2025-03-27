@@ -17,8 +17,6 @@ class ClassificationMethod:
     NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
 
     Args:
-        name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned"
-                    This name is used on the evaluation results.
         max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
@@ -26,7 +24,6 @@ class ClassificationMethod:
                           which label it selected.
         llm_instructions (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
-    name : str
     max_tokens : int
     prompt : str | None = None
     # extractor_method : func
@@ -224,7 +221,7 @@ def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.
     return answers
     
 
-def save_evaluation_result(result : EvaluationResult, output_dir : str = os.path.join("output", result.config.name)) -> None:
+def save_evaluation_result(result : EvaluationResult, output_dir : str) -> None:
     """
     Creates human-readable results from raw LLM evaluation data.
 
@@ -241,7 +238,7 @@ def save_evaluation_result(result : EvaluationResult, output_dir : str = os.path
 
     Args:
         result (EvaluationResult): The raw LLM evaluation data produced from ``evaluate()``.
-        output_dir (str): Which folder to save the results in. Defaults to ``output/<configuration_name>``.
+        output_dir (str): Which folder to save the results into.
     """
     # shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -264,8 +261,6 @@ def save_evaluation_result(result : EvaluationResult, output_dir : str = os.path
         text_kw={'fontsize': 6},
         values_format='.0%'
     )
-
-    disp.ax_.set_title( result.config.name )
 
     plt.savefig( os.path.join(output_dir, "confusion_matrix.png"), dpi=200, bbox_inches='tight' )
 
