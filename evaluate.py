@@ -170,9 +170,7 @@ def evaluate(
         # Get the LLM to generate an answer
         response = ft.generate(
                             prompt=prompt, model=model, tokenizer=tokenizer,
-                            max_new_tokens = eval_config.max_tokens,
-                            skip_special_tokens=True, response_only=True,
-                            do_sample=True, temperature=0.1
+                            max_new_tokens = eval_config.max_tokens
                             )
         
         # Extract the class ID from the LLM's answer if one exists

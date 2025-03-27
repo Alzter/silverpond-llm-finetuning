@@ -3,6 +3,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM
 from trl import SFTConfig, SFTTrainer
 import numpy as np
+import transformers
+
+transformers.set_seed(42) # Enable deterministic LLM output
 
 def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed:int=0) -> Dataset:
     """
@@ -235,8 +238,8 @@ def generate(
     model : AutoModelForCausalLM,
     tokenizer : AutoTokenizer,
     max_new_tokens : int = 64,
-    do_sample : bool = True,
-    temperature : float = 0.1
+    do_sample : bool = False,
+    temperature : float = 0
     ) -> str:
     """
     Generate an LLM response to a given query.
@@ -248,8 +251,8 @@ def generate(
         model (AutoModelForCausalLM): The LLM to use. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
         tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
         max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
-        do_sample (bool, optional): If true, disables deterministic generation. Defaults to True.
-        temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.1.
+        do_sample (bool, optional): If true, disables deterministic generation. Defaults to False.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
 
     Returns:
         response (str): The LLM's response.
