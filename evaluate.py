@@ -120,7 +120,7 @@ class EvaluationResult:
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
 
-        classif_report.to_csv( os.path.join(output_dir, "evaluation.csv"), index=False )
+        classif_report.to_csv( os.path.join(output_dir, "evaluation.csv") )
         answers.to_csv( os.path.join(output_dir, "answers.csv"), escapechar="\\" )
         incorrect_answers.to_csv( os.path.join(output_dir, "incorrect_answers.csv"), escapechar="\\" )
         plt.savefig( os.path.join(output_dir, "confusion_matrix.png"), dpi=200, bbox_inches='tight' )
