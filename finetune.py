@@ -239,7 +239,10 @@ def generate(
     tokenizer : AutoTokenizer,
     max_new_tokens : int = 64,
     do_sample : bool = False,
-    temperature : float = 0
+    temperature : float | None = None,
+    top_p : float | None = None,
+    top_k : float | None = None,
+    kwargs : dict = {}
     ) -> str:
     """
     Generate an LLM response to a given query.
@@ -253,6 +256,9 @@ def generate(
         max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
         do_sample (bool, optional): If true, disables deterministic generation. Defaults to False.
         temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Defaults to None.
+        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Defaults to None.
+        kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
 
     Returns:
         response (str): The LLM's response.
@@ -271,7 +277,10 @@ def generate(
     generation_output = model.generate(**tokenized_input,
                                        max_new_tokens=max_new_tokens,
                                        do_sample=do_sample,
-                                       temperature=temperature)
+                                       temperature=temperature,
+                                       top_p = top_p,
+                                       top_k = top_k,
+                                       **kwargs)
 
     # If required, remove the tokens belonging to the prompt
     #if response_only:
