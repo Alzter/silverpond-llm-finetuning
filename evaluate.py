@@ -97,11 +97,11 @@ class EvaluationResult:
         # shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
 
+        y_pred, y_true, label_names = self.y_pred, self.y_true, self.label_names
+
         # Calculate accuracy, precision, recall, and F1 score
         classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
         classif_report = pd.DataFrame(classif_report).transpose()
-
-        y_pred, y_true, label_names = self.y_pred, self.y_true, self.label_names
 
         label_names = label_names[0:len(np.unique(y_pred))]
 
