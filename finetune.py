@@ -31,7 +31,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed
     
     return sample
 
-def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None) -> Dataset:
+def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -42,9 +42,10 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
 
     Args:
         dataset (Dataset): The dataset to sample.
-        ratio (float, optional): What percentage of the dataset to sample from 1-0.
-        size (int, optional): Number of items the new dataset should have.
-        samples_per_class (int, optional): Number of items per class the new dataset should have.
+        ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
+        size (int, optional): Number of items the new dataset should have. Defaults to None.
+        samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
+        shuffle (bool, optional): Whether to shuffle the dataset before sampling it. Defaults to True.
 
     Returns:
         Dataset: The sample of the dataset.
@@ -128,7 +129,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     
     Returns:
         formatted_dataset (Dataset): The dataset in conversational format.
-        class_labels (list): The list of class label names.
+        label_names (list): The list of class label names.
     """
 
     # If the dataset is actually a container of datasets,
@@ -160,7 +161,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
 
     return dataset, label_names
 
-def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
+def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
     """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
@@ -184,13 +185,14 @@ def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, trai
     trainer.train()
     trainer.save_model(save_directory)
 
-def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0") -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
+def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
     """
     Load a finetuned LLM from disk.
 
     Args:
         model_directory (str): Where to load the fine-tuned model.
-        device_map (_type_, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+        device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+        quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
 
     Returns:
         model (AutoPeftModelForCausalLM): The fine-tuned LLM.
@@ -202,7 +204,8 @@ def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0") -> tu
         bnb_4bit_quant_type="nf4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_compute_dtype=torch.float16
-    )
+    ) if quantized else None
+
     config = PeftConfig.from_pretrained(model_path)
 
     tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)

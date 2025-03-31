@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 
 @dataclass
-class ClassificationMethod:
+class EvaluationConfig:
     """
     Defines how LLMs should be instructed to classify each text sample in a classification dataset.
     You can specify different configurations for different prompting techniques.
@@ -18,6 +18,7 @@ class ClassificationMethod:
     NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
 
     Args:
+        name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
         max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
@@ -25,6 +26,7 @@ class ClassificationMethod:
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
         prompt (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
     """
+    name : str
     max_tokens : int
     prompt : str | None = None
     # extractor_method : func
@@ -35,14 +37,14 @@ class EvaluationResult:
     Raw LLM text classification evaluation results produced from ``evaluate.evaluate()``.
 
     Args:
-        config (ClassificationMethod): 
+        config (EvaluationConfig): 
         texts (list[str]): 
         labels_pred (list[int]): 
         labels_true (list[int]): 
         label_names (list[str]): 
         llm_responses (list[str]): 
     """
-    config : ClassificationMethod
+    config : EvaluationConfig
     texts : list[str]
     labels_pred : list[int]
     labels_true : list[int]
@@ -76,7 +78,7 @@ class EvaluationResult:
 
         return answers
         
-    def save(self, output_dir : str) -> None:
+    def save(self, output_dir : str | None = None) -> None:
         """
         Creates human-readable results from raw LLM evaluation data.
 
@@ -92,8 +94,17 @@ class EvaluationResult:
         A table containing all LLM responses and a table containing only the incorrect responses.
 
         Args:
-            output_dir (str): Which folder to save the results into.
+            output_dir (str, optional): Which folder to save the results into. If not given, defaults to ``output/<name_of_technique>`` where ``name_of_technique`` is the ``name`` parameter of the ``EvaluationConfig``.
         """
+        
+        if output_dir is None:
+            # Make result name file safe
+            result_path_name = self.result.name.lower().strip().replace(" ", "_")
+            # Remove all non-alphanumeric characters
+            result_path_name = "".join(c for c in filename if c.isalnum() or c in ["-", "_", " "])
+
+            output_dir = os.path.join( "output", result_path_name )
+
         # shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -116,6 +127,8 @@ class EvaluationResult:
             text_kw={'fontsize': 6},
             values_format='.0%'
         )
+
+        disp.ax_.set_title( result.config.name )
 
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
@@ -206,7 +219,7 @@ def evaluate(
     tokenizer : AutoTokenizer,
     label_names : list,
     eval_dataset : Dataset,
-    eval_config : ClassificationMethod
+    eval_config : EvaluationConfig
     ) -> EvaluationResult:
     """
     Evaluate an LLM's text classification performance on a supervised dataset.
@@ -216,7 +229,7 @@ def evaluate(
         tokenizer (AutoTokenizer): The tokenizer to use. This should come with the LLM.
         label_names (list): The name of each class label in the evaluation dataset.
         eval_dataset (Dataset): The evaluation dataset. Must be preprocessed (see ``finetune.preprocess_dataset()``).
-        eval_config (ClassificationMethod): Controls what instructions to give to the LLM to classify each sample.
+        eval_config (EvaluationConfig): Controls what instructions to give to the LLM to classify each sample.
 
     Returns:
         EvaluationResult: Raw evaluation data, including all samples, predicted/actual labels, and the LLM's response for each sample.

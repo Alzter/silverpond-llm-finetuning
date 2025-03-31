@@ -31,7 +31,8 @@ def test_evaluate_llm(llm, eval_dataset):
     model, tokenizer = llm
     eval_data, label_names = eval_dataset
 
-    eval_config = ev.ClassificationMethod(
+    eval_config = ev.EvaluationConfig(
+        name="Zero-shot",
         prompt = model_prompts.PROMPT_ZEROSHOT,
         max_tokens = 3
     )
