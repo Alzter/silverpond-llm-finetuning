@@ -107,7 +107,7 @@ class EvaluationResult:
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
-        disp = ConfusionMatrixDisplay(cm, display_labels=class_labels).plot(
+        disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(
             cmap = plt.cm.Blues,
             xticks_rotation='vertical',
             text_kw={'fontsize': 6},
