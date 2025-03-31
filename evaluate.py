@@ -105,7 +105,7 @@ class EvaluationResult:
 
         # Determine how many class labels will be shown in the output
         # by finding how many were used in the result
-        threshold = max( len(np.unique(y_pred)), len(np.unique(y_true)) )
+        threshold = np.max([result.labels_true, result.labels_pred])
         label_names = label_names[0:threshold]
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
