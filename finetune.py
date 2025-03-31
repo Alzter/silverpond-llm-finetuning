@@ -65,8 +65,6 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
     Returns:
         Dataset: The sample of the dataset.
     """
-
-    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
     if shuffle: dataset=dataset.shuffle(seed=seed)
 
     # If the dataset is actually a container of datasets,
@@ -76,6 +74,8 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
             print(f"Processing subset: {subset}")
             dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class, shuffle, seed)
         return dataset
+
+    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
 
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
@@ -150,9 +150,6 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
         formatted_dataset (Dataset): The dataset in conversational format.
         label_names (list): The list of class label names.
     """
-
-    for column in [text_column, labels_column]:
-        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
     
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
@@ -160,6 +157,9 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
         for subset in dataset.keys():
             dataset[subset], label_names = preprocess_dataset(dataset[subset], text_column, labels_column)
         return dataset, label_names
+
+    for column in [text_column, labels_column]:
+        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     # Select only the text and label columns.
     dataset = dataset.select_columns([text_column,labels_column])
