@@ -28,11 +28,11 @@ class ClassificationMethod:
     max_tokens : int
     prompt : str | None = None
     # extractor_method : func
-
+        
 @dataclass
 class EvaluationResult:
     """
-    Raw LLM text classification evaluation results.
+    Raw LLM text classification evaluation results produced from ``evaluate.evaluate()``.
 
     Args:
         config (ClassificationMethod): 
@@ -48,6 +48,81 @@ class EvaluationResult:
     labels_true : list[int]
     label_names : list[str]
     llm_responses : list[str]
+
+    def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
+        """
+        Given raw LLM text classification evaluation data, return a DataFrame of the LLM's answers to each sample in human-readable format.
+
+        Args:
+            incorrect_only (bool, optional): Whether to only include the LLM's incorrect answers. Defaults to False.
+
+        Returns:
+            pd.DataFrame: A table containing each sample in the evaluation dataset, the LLM's response to each sample, and the predicted/actual labels.
+        """
+        # Cast labels from int (class ID) -> str (class name)
+        y_pred = [self.label_names[id] for id in self.labels_pred]
+        y_true = [self.label_names[id] for id in self.labels_true]
+        
+        answers = {
+        "Text" : np.array(self.texts),
+        "Predicted Label" : np.array(y_pred),
+        "True Label" : np.array(y_true),
+        "LLM Response" : np.array(self.llm_responses)
+        }
+        
+        answers = pd.DataFrame(answers)
+
+        if incorrect_only: answers = answers.loc[answers['Predicted Class'] != answers['True Class']]
+
+        return answers
+        
+    def save(self, output_dir : str) -> None:
+        """
+        Creates human-readable results from raw LLM evaluation data.
+
+        The following files are produced by this method:
+
+        1. Confusion matrix (``confusion_matrix.png``):
+        Graph visualisation of the LLM's accuracy.
+        
+        2. Classification report (``evaluation.csv``):
+        Report of the LLM's accuracy, precision, recall, and F1 score for all classes.
+        
+        3. LLM answer data (``answers.csv, answers_incorrect.csv``):
+        A table containing all LLM responses and a table containing only the incorrect responses.
+
+        Args:
+            output_dir (str): Which folder to save the results into.
+        """
+        # shutil.rmtree(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Calculate accuracy, precision, recall, and F1 score
+        classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
+        classif_report = pd.DataFrame(classif_report).transpose()
+
+        y_pred, y_true, label_names = self.y_pred, self.y_true, self.label_names
+
+        label_names = label_names[0:len(np.unique(y_pred))]
+
+        cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
+
+        disp = ConfusionMatrixDisplay(cm, display_labels=class_labels).plot(
+            cmap = plt.cm.Blues,
+            xticks_rotation='vertical',
+            text_kw={'fontsize': 6},
+            values_format='.0%'
+        )
+
+        answers = self.get_answers(incorrect_only=False)
+        incorrect_answers = self.get_answers(incorrect_only=True)
+
+        classif_report.to_csv( os.path.join(output_dir, "evaluation.csv"), index=False )
+        answers.to_csv( os.path.join(output_dir, "answers.csv"), escapechar="\\" )
+        incorrect_answers.to_csv( os.path.join(output_dir, "incorrect_answers.csv"), escapechar="\\" )
+        plt.savefig( os.path.join(output_dir, "confusion_matrix.png"), dpi=200, bbox_inches='tight' )
+
+        plt.show()
 
 def _get_class_id_from_model_response(model_response : str, label_names : list) -> int:
     """
@@ -190,82 +265,3 @@ def evaluate(
         labels_true=labels_true,
         label_names=label_names,
         llm_responses=llm_responses)
-
-def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.DataFrame:
-    """
-    Given raw LLM text classification evaluation data, return a DataFrame of the LLM's answers to each sample in human-readable format.
-
-    Args:
-        result (EvaluationResult): The raw LLM evaluation data produced from ``evaluate()``.
-        incorrect_only (bool, optional): Whether to only include the LLM's incorrect answers. Defaults to False.
-
-    Returns:
-        pd.DataFrame: A table containing each sample in the evaluation dataset, the LLM's response to each sample, and the predicted/actual labels.
-    """
-    # Cast labels from int (class ID) -> str (class name)
-    y_pred = [result.label_names[id] for id in result.labels_pred]
-    y_true = [result.label_names[id] for id in result.labels_true]
-    
-    answers = {
-      "Text" : np.array(result.texts),
-      "Predicted Label" : np.array(y_pred),
-      "True Label" : np.array(y_true),
-      "LLM Response" : np.array(result.llm_responses)
-    }
-    
-    answers = pd.DataFrame(answers)
-
-    if incorrect_only: answers = answers.loc[answers['Predicted Class'] != answers['True Class']]
-
-    return answers
-    
-
-def save_evaluation_result(result : EvaluationResult, output_dir : str) -> None:
-    """
-    Creates human-readable results from raw LLM evaluation data.
-
-    The following files are produced by this method:
-
-    1. Confusion matrix (``confusion_matrix.png``):
-       Graph visualisation of the LLM's accuracy.
-       
-    2. Classification report (``evaluation.csv``):
-       Report of the LLM's accuracy, precision, recall, and F1 score for all classes.
-       
-    3. LLM answer data (``answers.csv, answers_incorrect.csv``):
-       A table containing all LLM responses and a table containing only the incorrect responses.
-
-    Args:
-        result (EvaluationResult): The raw LLM evaluation data produced from ``evaluate()``.
-        output_dir (str): Which folder to save the results into.
-    """
-    # shutil.rmtree(output_dir)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Calculate accuracy, precision, recall, and F1 score
-    classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
-    classif_report = pd.DataFrame(classif_report).transpose()
-
-    classif_report.to_csv( os.path.join(output_dir, "evaluation.csv"), index=False )
-
-    y_pred, y_true, label_names = result.y_pred, result.y_true, result.label_names
-
-    label_names = label_names[0:len(np.unique(y_pred))]
-
-    cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
-
-    disp = ConfusionMatrixDisplay(cm, display_labels=class_labels).plot(
-        cmap = plt.cm.Blues,
-        xticks_rotation='vertical',
-        text_kw={'fontsize': 6},
-        values_format='.0%'
-    )
-
-    plt.savefig( os.path.join(output_dir, "confusion_matrix.png"), dpi=200, bbox_inches='tight' )
-
-    answers = get_answers(result, incorrect_only=False)
-    answers.to_csv( os.path.join(output_dir, "answers.csv"), escapechar="\\" )
-
-    incorrect_answers = get_answers(result, incorrect_only=True)
-    incorrect_answers.to_csv( os.path.join(output_dir, "incorrect_answers.csv"), escapechar="\\" )
-    
