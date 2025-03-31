@@ -26,6 +26,8 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
 
     print("Sorting dataset by label")
     ds_sorted = dataset.sort(labels_column)
+
+    print("Obtaining class indices 1")
     _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
 
     # Ensure n is not greater than the number of samples per class
@@ -33,12 +35,14 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     n = min(n, samples_per_class)
     n = max(n, 1)
 
-    print("Obtaining class indices")
+    print("Obtaining class indices 2")
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
     print("Sampling dataset")
     sample = dataset.sort(labels_column).select(class_indices)
+
+    print("Shuffling dataset")
     if shuffle: sample = sample.shuffle(seed=seed)
     
     print("Complete")
