@@ -225,10 +225,10 @@ def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quant
         bnb_4bit_compute_dtype=torch.float16
     ) if quantized else None
 
-    config = PeftConfig.from_pretrained(model_path)
+    config = PeftConfig.from_pretrained(model_directory)
 
     tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
-    model = AutoPeftModelForCausalLM.from_pretrained(model_path, device_map=device_map, quantization_config=bnb_config)
+    model = AutoPeftModelForCausalLM.from_pretrained(model_directory, device_map=device_map, quantization_config=bnb_config)
 
     return (model, tokenizer)
 
