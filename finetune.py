@@ -7,12 +7,13 @@ import transformers
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed:int=0) -> Dataset:
+def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, shuffle:bool=True, seed:int=0) -> Dataset:
     """
     Given a dataset, obtain a smaller dataset containing the first **n** samples from each class.
 
     Args:
         dataset (Dataset): The dataset to sample.
+        labels_column (str): The column name for the labels in the dataset.
         n (int): How many samples from each class to extract.
         shuffle (bool): Whether to sort the final result by class or randomly.
         seed (int, optional): RNG seed. Defaults to 0.
@@ -20,18 +21,19 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed
     Returns:
         Dataset: The sample of the dataset.
     """
-    ds_sorted = dataset.sort('label')
-    _, class_indices = np.unique(ds_sorted['label'], return_index=True)
+    ds_sorted = dataset.sort(labels_column)
+    _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
+
 
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
-    sample = dataset.sort('label').select(class_indices)
+    sample = dataset.sort(labels_column).select(class_indices)
     if shuffle: sample = sample.shuffle(seed=seed)
     
     return sample
 
-def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -42,6 +44,7 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
 
     Args:
         dataset (Dataset): The dataset to sample.
+        labels_column (str): The column name for the labels in the dataset.
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
         samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
@@ -62,8 +65,6 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
             dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
-    print("Calculating samples per class")
-
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
 
@@ -76,11 +77,7 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         samples_per_class = dataset.num_rows // len(dataset.features['label'].names)
         samples_per_class = int(samples_per_class * ratio)
 
-    print(f"Getting {samples_per_class} samples per class")
-
-    return _get_n_samples_per_class(dataset, samples_per_class, shuffle=shuffle, seed=seed)
-
-    print("Complete")
+    return _get_n_samples_per_class(dataset, samples_per_class, labels_column, shuffle=shuffle, seed=seed)
 
 def _format_dataset(examples : Dataset) -> dict:
     """
