@@ -103,7 +103,10 @@ class EvaluationResult:
         classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
         classif_report = pd.DataFrame(classif_report).transpose()
 
-        label_names = label_names[0:len(np.unique(y_pred))]
+        # Determine how many class labels will be shown in the output
+        # by finding how many were used in the result
+        threshold = max( len(np.unique(y_pred)), len(np.unique(y_true)) )
+        label_names = label_names[0:threshold]
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
