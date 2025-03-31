@@ -94,12 +94,12 @@ class EvaluationResult:
         A table containing all LLM responses and a table containing only the incorrect responses.
 
         Args:
-            output_dir (str, optional): Which folder to save the results into. If not given, defaults to ``output/<name_of_technique>`` where ``name_of_technique`` is the ``name`` parameter of the ``EvaluationConfig``.
+            output_dir (str, optional): Which folder to save the results into. Defaults to ``output/<self.config.name>``.
         """
         
         if output_dir is None:
             # Make result name file safe
-            result_path_name = self.result.name.lower().strip().replace(" ", "_")
+            result_path_name = self.config.name.lower().strip().replace(" ", "_")
             # Remove all non-alphanumeric characters
             result_path_name = "".join(c for c in filename if c.isalnum() or c in ["-", "_", " "])
 
