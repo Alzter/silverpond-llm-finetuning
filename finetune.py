@@ -21,16 +21,24 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     Returns:
         Dataset: The sample of the dataset.
     """
+    print("Sorting dataset by label")
     ds_sorted = dataset.sort(labels_column)
     _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
 
+    # Ensure n is not greater than the number of samples per class
+    samples_per_class = np.diff(class_indices).min()
+    n = min(n, samples_per_class)
+    n = max(n, 1)
 
+    print("Obtaining class indices")
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
+    print("Sampling dataset")
     sample = dataset.sort(labels_column).select(class_indices)
     if shuffle: sample = sample.shuffle(seed=seed)
     
+    print("Complete")
     return sample
 
 def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
