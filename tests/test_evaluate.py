@@ -16,7 +16,7 @@ def llm():
     )
 
     model_id = "Qwen/Qwen2.5-7B-Instruct"
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0", quantization_config=bnb_config)
+    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=bnb_config)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     return (model, tokenizer)
 
