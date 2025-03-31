@@ -15,7 +15,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed
         dataset (Dataset): The dataset to sample.
         n (int): How many samples from each class to extract.
         shuffle (bool): Whether to sort the final result by class or randomly.
-        seed (int): RNG seed.
+        seed (int, optional): RNG seed. Defaults to 0.
 
     Returns:
         Dataset: The sample of the dataset.
@@ -31,7 +31,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed
     
     return sample
 
-def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True) -> Dataset:
+def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -45,11 +45,14 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
         samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
-        shuffle (bool, optional): Whether to shuffle the dataset before sampling it. Defaults to True.
+        shuffle (bool, optional): Whether to shuffle the dataset before and after sampling it. Defaults to True.
+        seed (int, optional): RNG seed. Defaults to 0.
 
     Returns:
         Dataset: The sample of the dataset.
     """
+
+    if shuffle: dataset=dataset.shuffle(seed=seed)
 
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
@@ -70,7 +73,7 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         samples_per_class = dataset.num_rows // len(dataset.features['label'].names)
         samples_per_class = int(samples_per_class * ratio)
 
-    return _get_n_samples_per_class(dataset, samples_per_class)
+    return _get_n_samples_per_class(dataset, samples_per_class, shuffle=shuffle)
 
 def _format_dataset(examples : Dataset) -> dict:
     """
