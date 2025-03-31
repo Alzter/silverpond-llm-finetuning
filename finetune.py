@@ -42,7 +42,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     
     return sample
 
-def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -53,7 +53,7 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
 
     Args:
         dataset (Dataset): The dataset to sample.
-        labels_column (str): The column name for the labels in the dataset.
+        labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
         samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
@@ -134,14 +134,14 @@ def _label_to_string(sample : dict, class_label_names : list) -> dict:
     sample['completion'] = class_label_names[ int(sample['completion']) ]
     return sample
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str) -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str = "label") -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
     Args:
         dataset (Dataset | DatasetDict): A supervised text-classification dataset.
         text_column (str): The column name for the input text column (X).
-        labels_column (str): The column name for the output label column (y).
+        labels_column (str, optional): The column name for the output label column (y). Defaults to "label".
     
     Returns:
         formatted_dataset (Dataset): The dataset in conversational format.
