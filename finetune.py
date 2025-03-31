@@ -24,10 +24,8 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
 
     if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
 
-    print("Sorting dataset by label")
-    ds_sorted = dataset.sort(labels_column)
+    ds_sorted = dataset.sort(labels_column) # BUG: This takes forever if done twice on a dataset
 
-    print("Obtaining class indices 1")
     _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
 
     # Ensure n is not greater than the number of samples per class
@@ -35,17 +33,13 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     n = min(n, samples_per_class)
     n = max(n, 1)
 
-    print("Obtaining class indices 2")
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
-    print("Sampling dataset")
-    sample = dataset.sort(labels_column).select(class_indices)
+    sample = dataset.sort(labels_column).select(class_indices) # BUG: This takes forever if done twice on a dataset
 
-    print("Shuffling dataset")
     if shuffle: sample = sample.shuffle(seed=seed)
     
-    print("Complete")
     return sample
 
 def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
@@ -75,7 +69,6 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
-            print(f"Processing subset: {subset}")
             dataset[subset] = sample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
