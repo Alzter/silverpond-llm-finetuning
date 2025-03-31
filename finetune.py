@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM
 from trl import SFTConfig, SFTTrainer
 import numpy as np
-import transformers
+import transformers, torch
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
