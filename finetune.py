@@ -58,8 +58,11 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
+            print(f"Processing subset: {subset}")
             dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class, shuffle, seed)
         return dataset
+
+    print("Calculating samples per class")
 
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
@@ -73,7 +76,11 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         samples_per_class = dataset.num_rows // len(dataset.features['label'].names)
         samples_per_class = int(samples_per_class * ratio)
 
+    print(f"Getting {samples_per_class} samples per class")
+
     return _get_n_samples_per_class(dataset, samples_per_class, shuffle=shuffle, seed=seed)
+
+    print("Complete")
 
 def _format_dataset(examples : Dataset) -> dict:
     """
