@@ -213,7 +213,7 @@ def get_answers(result : EvaluationResult, incorrect_only : bool = False) -> pd.
       "LLM Response" : np.array(result.llm_responses)
     }
     
-    answers = pd.DataFrame(answers, index=index)
+    answers = pd.DataFrame(answers)
 
     if incorrect_only: answers = answers.loc[answers['Predicted Class'] != answers['True Class']]
 
