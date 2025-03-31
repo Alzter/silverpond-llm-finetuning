@@ -101,7 +101,7 @@ class EvaluationResult:
             # Make result name file safe
             result_path_name = self.config.name.lower().strip().replace(" ", "_")
             # Remove all non-alphanumeric characters
-            result_path_name = "".join(c for c in filename if c.isalnum() or c in ["-", "_", " "])
+            result_path_name = "".join(c for c in result_path_name if c.isalnum() or c in ["-", "_", " "])
 
             output_dir = os.path.join( "output", result_path_name )
 
