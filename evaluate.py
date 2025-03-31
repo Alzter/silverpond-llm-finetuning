@@ -72,7 +72,7 @@ class EvaluationResult:
         
         answers = pd.DataFrame(answers)
 
-        if incorrect_only: answers = answers.loc[answers['Predicted Class'] != answers['True Class']]
+        if incorrect_only: answers = answers.loc[answers['Predicted Label'] != answers['True Class']]
 
         return answers
         
