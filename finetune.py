@@ -276,10 +276,10 @@ def generate(
         model (AutoModelForCausalLM): The LLM to use. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
         tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
         max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
-        do_sample (bool, optional): If true, disables deterministic generation. Defaults to False.
-        temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
-        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Defaults to None.
-        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Defaults to None.
+        do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
         kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
 
     Returns:
