@@ -21,6 +21,9 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     Returns:
         Dataset: The sample of the dataset.
     """
+
+    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
+
     print("Sorting dataset by label")
     ds_sorted = dataset.sort(labels_column)
     _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
@@ -63,6 +66,7 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
         Dataset: The sample of the dataset.
     """
 
+    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
     if shuffle: dataset=dataset.shuffle(seed=seed)
 
     # If the dataset is actually a container of datasets,
@@ -147,6 +151,9 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
         label_names (list): The list of class label names.
     """
 
+    for column in [text_column, labels_column]:
+        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
+    
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
