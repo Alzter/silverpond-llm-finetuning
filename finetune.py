@@ -72,7 +72,7 @@ def sample_dataset(dataset : Dataset, labels_column : str, ratio : float = None,
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
             print(f"Processing subset: {subset}")
-            dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class, shuffle, seed)
+            dataset[subset] = sample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
     if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
