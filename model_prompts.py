@@ -75,7 +75,7 @@ Solution Structure:
 """
 
 # Few-shot chain-of-thought prompt to classify articles and return their category name.
-PROMPT_COT_4SHOT = """Read an encyclopedia article excerpt and give it one of the following categories:
+PROMPT_COT_4SHOT = """You are an expert at classifying articles into the following categories:
 
 CATEGORIES:
 - Company
@@ -121,7 +121,7 @@ Problem:
 """
 
 # Few-shot chain-of-thought prompt to classify articles and return their category name.
-PROMPT_COT_2SHOT = """Read an encyclopedia article excerpt and give it one of the following categories:
+PROMPT_COT_2SHOT = """You are an expert at classifying articles into the following categories:
 
 CATEGORIES:
 - Company
