@@ -74,8 +74,8 @@ class EvaluationResult:
         answers = {
         "Text" : np.array(self.texts),
         "Predicted Label" : np.array(y_pred),
-        "True Label" : np.array(y_true),
         "LLM Response" : np.array(self.llm_responses),
+        "True Label" : np.array(y_true),
         "Prediction Time" : np.array(self.prediction_times)
         }
         
@@ -180,10 +180,11 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
 
     The method to extract class IDs has 3 steps:
     1. Try to directly match the output with an item in ``label_names``.
-    2. If ``model_response`` only contains the first few letters of a class label, try to match it with a truncated class label.
+    2. If ``model_response`` is an integer within the range of ``label_names``, return ``model_response`` casted as an int.
+    3. If ``model_response`` only contains the first few letters of a class label, try to match it with a truncated class label.
        This allows you to run LLM evaluation with fewer max tokens than needed for the LLM to fully write each class label,
        which greatly reduces the time it takes for the model to classify each sample while retaining accuracy.
-    3. Try to find the last matching class label name from the model's response using RegEx.
+    4. Try to find the last matching class label name from the model's response using RegEx.
        This is useful for CoT prompting, where the model may end the answer with the class label it decided on.
 
     Args:
@@ -200,9 +201,22 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
         return class_id
     except Exception as e:
         pass
-
+    
     model_response = model_response.lower().strip()
     
+    # If the response is an integer, return it if it's a valid class ID
+    if model_response.isdigit():
+        try:
+            class_id = int(model_response)
+            # The integer must be within the range of class IDs
+            if class_id >= 0 and class_id < len(label_names) - 2:
+                return class_id
+            else:
+                # If it isn't, just return the last label ("I don't know").
+                return len(label_names) - 1
+        except Exception:
+            pass
+
     # Match class labels if model_response is truncated.
     # E.g., "mean" -> "meanoftransportation" -> 5
     # This allows us to match labels even we don't
@@ -235,7 +249,7 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
         return class_id
 
     else:
-        # If no class label is found in the LLM text, return the last label.
+        # If no class label is found in the LLM text, return the last label ("I don't know").
         return len(label_names) - 1
 
 def evaluate(
