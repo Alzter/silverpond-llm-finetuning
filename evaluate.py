@@ -46,7 +46,7 @@ class EvaluationResult:
         label_names (list[str]): List of all class label names.
         llm_responses (list[str]): Raw LLM response to each sample.
         prediction_times (list[float]): How long it took the LLM to classify each sample in seconds.
-        total_time_elapsed (timedelta): How long the evaluation took to run overall.
+        total_time_elapsed (float): How long the evaluation took to run overall in seconds.
     """
     config : EvaluationConfig
     texts : list[str]
@@ -55,7 +55,7 @@ class EvaluationResult:
     label_names : list[str]
     llm_responses : list[str]
     prediction_times : list[float]
-    total_time_elapsed : timedelta
+    total_time_elapsed : float
 
     def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
         """
@@ -84,7 +84,16 @@ class EvaluationResult:
         if incorrect_only: answers = answers.loc[answers['Predicted Label'] != answers['True Label']]
 
         return answers
-        
+    
+    def get_time_elapsed(self) -> timedelta:
+        """
+        Return the total time elapsed running the evaluation.
+
+        Returns:
+            timedelta: Total time elapsed.
+        """
+        return timedelta(seconds=self.total_time_elapsed)
+    
     def save(self, output_dir : str | None = None) -> None:
         """
         Creates human-readable results from raw LLM evaluation data.
@@ -291,7 +300,7 @@ def evaluate(
         # Add each iteration to the time taken.
         time_elapsed.append(time.time())
 
-    total_time_elapsed = timedelta(seconds = time_elapsed[-1] - time_elapsed[0])
+    total_time_elapsed = time_elapsed[-1] - time_elapsed[0]
     prediction_times = list(np.diff(time_elapsed))
 
     # Get all class label IDs (y_true) in eval_dataset
