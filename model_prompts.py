@@ -41,7 +41,7 @@ CATEGORIES:
 13. WrittenWork
 
 Read the following article and explain which category describes its content best.
-End your answer with the category name.
+End your answer with the category name, i.e. "Company".
 Let's think step by step.
 """
 
