@@ -18,7 +18,7 @@ CATEGORIES:
 13. WrittenWork
 
 Read the following article then answer with the name of the category which suits it best.
-Answer with ONLY the name of the category.
+Answer with ONLY the name of the category, i.e. "Company".
 """
 
 # Zero-shot chain-of-thought prompt to classify articles and return their category name.
