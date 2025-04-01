@@ -128,7 +128,7 @@ class EvaluationResult:
             values_format='.0%'
         )
 
-        disp.ax_.set_title( result.config.name )
+        disp.ax_.set_title( self.config.name )
 
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
