@@ -1,6 +1,6 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM
+from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
 from trl import SFTConfig, SFTTrainer
 import numpy as np
 import transformers, torch
