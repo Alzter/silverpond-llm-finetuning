@@ -121,6 +121,7 @@ class EvaluationResult:
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
+        print("Display plot...")
         disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(
             cmap = plt.cm.Blues,
             xticks_rotation='vertical',
@@ -133,11 +134,17 @@ class EvaluationResult:
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
 
+        print("Saving...")
+        print("evaluation")
         classif_report.to_csv( os.path.join(output_dir, "evaluation.csv") )
+        print("answers")
         answers.to_csv( os.path.join(output_dir, "answers.csv"), escapechar="\\" )
+        print("incorrect_answers")
         incorrect_answers.to_csv( os.path.join(output_dir, "incorrect_answers.csv"), escapechar="\\" )
+        print("confusion_matrix")
         plt.savefig( os.path.join(output_dir, "confusion_matrix.png"), dpi=200, bbox_inches='tight' )
 
+        print("Done. Showing plot...")
         plt.show()
 
 def _get_class_id_from_model_response(model_response : str, label_names : list) -> int:
