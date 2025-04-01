@@ -263,6 +263,8 @@ def generate(
     model : AutoModelForCausalLM,
     tokenizer : AutoTokenizer,
     max_new_tokens : int = 64,
+    response_only : bool = True,
+    skip_special_tokens : bool = True,
     do_sample : bool = False,
     temperature : float | None = None,
     top_p : float | None = None,
@@ -279,12 +281,13 @@ def generate(
         model (AutoModelForCausalLM): The LLM to use. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
         tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
         max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+        response_only (bool, optional): If True, excludes all previous messages from the output. Defaults to True.
+        skip_special_tokens (bool, optional): If True, removes model special tokens from the output. Defaults to True.
         do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
         temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
         top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
         kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
-
     Returns:
         response (str): The LLM's response.
     """
@@ -308,12 +311,12 @@ def generate(
                                        **kwargs)
 
     # If required, remove the tokens belonging to the prompt
-    #if response_only:
-    input_length = tokenized_input['input_ids'].shape[1]
-    generation_output = generation_output[:, input_length:]
+    if response_only:
+        input_length = tokenized_input['input_ids'].shape[1]
+        generation_output = generation_output[:, input_length:]
     
     # Decode the tokens back into text
-    output = tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
+    output = tokenizer.batch_decode(generation_output, skip_special_tokens=skip_special_tokens)[0]
     return output
 
 
