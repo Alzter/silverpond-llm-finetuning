@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import os, shutil, re
@@ -8,6 +8,8 @@ from matplotlib import pyplot as plt
 import finetune as ft
 import pandas as pd
 import numpy as np
+import time
+from datetime import timedelta
 
 @dataclass
 class EvaluationConfig:
@@ -37,12 +39,14 @@ class EvaluationResult:
     Raw LLM text classification evaluation results produced from ``evaluate.evaluate()``.
 
     Args:
-        config (EvaluationConfig): 
-        texts (list[str]): 
-        labels_pred (list[int]): 
-        labels_true (list[int]): 
-        label_names (list[str]): 
-        llm_responses (list[str]): 
+        config (EvaluationConfig): The instructions given to the LLM to classify each sample.
+        texts (list[str]): Every text sample in the evaluation dataset. (X_test)
+        labels_pred (list[int]): Predicted class ID (int) for each sample. (y_pred)
+        labels_true (list[int]): True class ID (int) for each sample. (y_true)
+        label_names (list[str]): List of all class label names.
+        llm_responses (list[str]): Raw LLM response to each sample.
+        prediction_times (list[float]): How long it took the LLM to classify each sample in seconds.
+        total_time_elapsed (timedelta): How long the evaluation took to run overall.
     """
     config : EvaluationConfig
     texts : list[str]
@@ -50,6 +54,8 @@ class EvaluationResult:
     labels_true : list[int]
     label_names : list[str]
     llm_responses : list[str]
+    prediction_times : list[float]
+    total_time_elapsed : timedelta
 
     def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
         """
@@ -69,7 +75,8 @@ class EvaluationResult:
         "Text" : np.array(self.texts),
         "Predicted Label" : np.array(y_pred),
         "True Label" : np.array(y_true),
-        "LLM Response" : np.array(self.llm_responses)
+        "LLM Response" : np.array(self.llm_responses),
+        "Prediction Time" : np.array(self.prediction_times)
         }
         
         answers = pd.DataFrame(answers)
@@ -93,6 +100,9 @@ class EvaluationResult:
         3. LLM answer data (``answers.csv, answers_incorrect.csv``):
         A table containing all LLM responses and a table containing only the incorrect responses.
 
+        4. Raw JSON data (``raw_output.json``):
+        Useful if you want to retrieve exact values from the output for future analysis.
+
         Args:
             output_dir (str, optional): Which folder to save the results into. Defaults to ``output/<self.config.name>``.
         """
@@ -107,6 +117,11 @@ class EvaluationResult:
 
         # shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
+
+        # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
+        data = asdict(self)
+        with open( os.path.join(output_dir, "raw_output.json"), "w", encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
         y_pred, y_true, label_names = self.labels_pred, self.labels_true, self.label_names
 
@@ -246,6 +261,9 @@ def evaluate(
     # Get all text inputs (X) in eval_dataset
     texts = [message[0]['content'].strip() for message in eval_dataset['messages']]
 
+    # Start logging how long the evaluation takes to run.
+    time_elapsed = [time.time()]
+
     # For every sample:
     for text in tqdm(texts, "Evaluating model"):
         
@@ -270,6 +288,12 @@ def evaluate(
         labels_pred.append(pred_class)
         llm_responses.append(response)
 
+        # Add each iteration to the time taken.
+        time_elapsed.append(time.time())
+
+    total_time_elapsed = timedelta(seconds = time_elapsed[-1] - time_elapsed[0])
+    prediction_times = list(np.diff(time_elapsed))
+
     # Get all class label IDs (y_true) in eval_dataset
     groundtruth = [message[-1]['content'] for message in eval_dataset['messages']]
     labels_true = [_get_class_id_from_model_response(label, label_names) for label in groundtruth]
@@ -280,4 +304,6 @@ def evaluate(
         labels_pred=labels_pred,
         labels_true=labels_true,
         label_names=label_names,
-        llm_responses=llm_responses)
+        llm_responses=llm_responses,
+        prediction_times=prediction_times,
+        total_time_elapsed=total_time_elapsed)
