@@ -145,12 +145,20 @@ class EvaluationResult:
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
-        disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(
-            cmap = plt.cm.Blues,
-            xticks_rotation='vertical',
-            text_kw={'fontsize': 6},
-            values_format='.0%'
-        )
+        try:
+            disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(
+                cmap = plt.cm.Blues,
+                xticks_rotation='vertical',
+                text_kw={'fontsize': 6},
+                values_format='.0%'
+            )
+        except Exception:
+            disp = ConfusionMatrixDisplay(cm).plot(
+                cmap = plt.cm.Blues,
+                xticks_rotation='vertical',
+                text_kw={'fontsize': 6},
+                values_format='.0%'
+            )
 
         disp.ax_.set_title( self.config.name )
 
