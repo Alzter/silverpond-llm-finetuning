@@ -240,8 +240,9 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
         # Get the last matching label from the string.
         final_match = matches[-1]
 
-        print(final_match)
-        print(type(final_match))
+        # If this didn't return a string, fail
+        if type(final_match) is not str:
+            return len(label_names) - 1
 
         # Remove all capitalisation, non-alphabetic characters, and whitespace
         labels_sanitised = [re.sub("[^a-z]", "", label.lower()) for label in label_names]
