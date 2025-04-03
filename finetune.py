@@ -3,9 +3,114 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
 from trl import SFTConfig, SFTTrainer
 import numpy as np
+import pandas as pd
 import transformers, torch
+from pandas import DataFrame
+from copy import copy
+import math
+import warnings
 
 transformers.set_seed(42) # Enable deterministic LLM output
+
+def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str, test_size : float | None = 0.1) -> Dataset:
+    """
+    Convert a DataFrame into a Dataset for pre-processing.
+
+    Args:
+        df (DataFrame): The DataFrame to convert.
+        text_column (str): The column name for the input text column (X).
+        labels_column (str): The column name for the output label column (y). Labels *must* be a string, not a class ID.
+        test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
+
+    Returns:
+        Dataset: The dataset.
+    """
+    df = df.copy() # Copy the dataframe to prevent the original being modified
+
+    df[labels_column] = df[labels_column].map(lambda x : x.strip() if type(x) is str else x)
+
+    # Delete any empty values
+    df = df.dropna(subset=[text_column, labels_column])
+    
+    data = {
+        "text" : df[text_column].to_list(),
+        "label" : df[labels_column].to_list()
+    }
+    
+    ds = Dataset.from_dict(data)
+    ds = ds.class_encode_column("label") # Convert label from Value to ClassLabel
+
+    if test_size is not None:
+        ds = ds.train_test_split(test_size=test_size)
+    
+    #ds = ds.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
+
+    return ds
+
+def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_column : str = "label", main_subset : str = 'train', top_n_labels : list | None = None) -> Dataset:
+    """
+    Given a dataset, limit the total number of classes to the top ``n`` most common.
+    All samples not within the top ``n`` classes are removed.
+    
+    NOTE: This does *not* adjust the number of samples *per* class to be equal; use ``sample_dataset()`` for that.
+
+    Args:
+        dataset (Dataset | DatasetDict): The dataset to sample.
+        n (int, optional): Top ``n`` most common classes to select from the dataset. Defaults to 10.
+        labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
+        main_subset (str, optional): If a ``DatasetDict`` is passed to this function (e.g., a dataset split into train/test subsets),
+                                        this argument specifies *which* subset to use to get the top ``n`` classes.
+                                        Defaults to 'train'.
+        top_n_labels (list | None, optional): Optional arbitrary list of class labels to use. If provided, selects these class labels instead of the top ``n`` classes. Defaults to None.
+
+    Returns:
+        Dataset: The dataset with only samples from the top ``n`` classes.
+    """
+    if top_n_labels is None:
+        # Select the top n class labels from the main dataset
+        if type(dataset) is DatasetDict:
+            # If the dataset is split into train/test sets,
+            # use the train subset by default, since that is the largest
+            main_dataset = dataset[main_subset]
+        else: main_dataset = dataset
+        
+        labels = pd.Series(main_dataset[labels_column])
+        n = max(n, 1)
+        n = min(n, labels.size)
+        
+        # Get the top n labels from the dataset as a list
+        top_n_labels = labels.value_counts().iloc[0:n]
+    
+    # If the dataset is actually a container of datasets,
+    # use recursion to sample all sub-datasets
+    if type(dataset) is DatasetDict:
+        dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
+        for subset in dataset.keys():
+            dataset[subset] = select_top_n_classes(dataset[subset], labels_column=labels_column, n=n, top_n_labels = top_n_labels)
+        #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
+        return dataset
+    
+    dataset = dataset.filter(lambda x : x[labels_column] in top_n_labels)
+
+    # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
+    if type(dataset.features[labels_column]) is ClassLabel:
+
+        # Get the existing label names.
+        label_names = dataset.features[labels_column].names
+
+        # Select only the labels from the top n classes.
+        indices = top_n_labels.keys().to_list()
+        new_names = [label_names[i] for i in indices]
+
+        # Convert class label column into raw strings.
+        dataset = dataset.cast_column(labels_column, Value(dtype='string'))
+        dataset = dataset.map( lambda sample : _label_to_string(sample, label_names, label_column=labels_column) )
+        
+        # Cast class label column back into a ClassLabel using the new label names.
+        dataset = dataset.class_encode_column(labels_column)
+
+    #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
+    return dataset
 
 def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, shuffle:bool=True, seed:int=0) -> Dataset:
     """
@@ -24,25 +129,34 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
 
     if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
 
-    ds_sorted = dataset.sort(labels_column) # BUG: This takes forever if done twice on a dataset
+
+    ds_sorted = dataset.flatten_indices().sort(labels_column) # BUG: .sort() takes forever if called after .filter() unless you call .flatten_indices()
 
     _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
 
-    # Ensure n is not greater than the number of samples per class
+    # Get the number of samples from the least common class.
+    num_samples_in_minority_class = pd.Series(ds_sorted[labels_column]).value_counts().min()
+
+    # Ensure n is not greater than the number of samples per class.
     samples_per_class = np.diff(class_indices).min()
     n = min(n, samples_per_class)
     n = max(n, 1)
 
+    # Undersample if needed to ensure an equal number of samples per class.
+    if n > num_samples_in_minority_class:
+        warnings.warn(f"\nCannot sample {n} samples per class equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
+    n = min(n, num_samples_in_minority_class)
+
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
-    sample = dataset.sort(labels_column).select(class_indices) # BUG: This takes forever if done twice on a dataset
+    sample = ds_sorted.select(class_indices)
 
     if shuffle: sample = sample.shuffle(seed=seed)
     
     return sample
 
-def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def sample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -52,7 +166,7 @@ def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : flo
     - **samples_per_class**: Specify how many items each class should have inside the sample.
 
     Args:
-        dataset (Dataset): The dataset to sample.
+        dataset (Dataset | DatasetDict): The dataset to sample.
         labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
@@ -63,15 +177,17 @@ def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : flo
     Returns:
         Dataset: The sample of the dataset.
     """
-    if shuffle: dataset=dataset.shuffle(seed=seed)
 
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
+        dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
             dataset[subset] = sample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
+    if shuffle: dataset=dataset.shuffle(seed=seed)
+    
     if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
 
     if ratio is None and size is None and samples_per_class is None:
@@ -82,9 +198,11 @@ def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : flo
             ratio = size / dataset.num_rows
         ratio = max(ratio, 0)
         ratio = min(ratio, 1)
-    
-        samples_per_class = dataset.num_rows // len(dataset.features['label'].names)
-        samples_per_class = int(samples_per_class * ratio)
+
+        num_labels = np.unique(dataset[labels_column]).size
+        
+        samples_per_class = dataset.num_rows / num_labels * ratio
+        samples_per_class = int(math.floor(samples_per_class))
 
     return _get_n_samples_per_class(dataset, samples_per_class, labels_column, shuffle=shuffle, seed=seed)
 
@@ -117,7 +235,7 @@ def _format_dataset(examples : Dataset) -> dict:
         ]
         return {'messages': converted_sample}
 
-def _label_to_string(sample : dict, class_label_names : list) -> dict:
+def _label_to_string(sample : dict, class_label_names : list, label_column : str = "completion") -> dict:
     """
     Given a sample from a supervised text classification dataset
     in prompt/completion format, replace the class label ID with
@@ -131,10 +249,10 @@ def _label_to_string(sample : dict, class_label_names : list) -> dict:
     Returns:
         dict: The data sample with class ID replaced with label name.
     """
-    sample['completion'] = class_label_names[ int(sample['completion']) ]
+    sample[label_column] = class_label_names[ int(sample[label_column]) ]
     return sample
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str = "label") -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "text", labels_column : str = "label") -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
@@ -151,6 +269,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
+        dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
             dataset[subset], label_names = preprocess_dataset(dataset[subset], text_column, labels_column)
         return dataset, label_names
@@ -165,15 +284,17 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
     dataset = dataset.rename_column(text_column, "prompt")
     dataset = dataset.rename_column(labels_column, "completion")
 
-    label_names = dataset.features['completion'].names
-
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
-
+        label_names = dataset.features['completion'].names
+        label_names = [n.strip() for n in label_names]
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
         # Replace all class label IDs with label names.
         dataset = dataset.map( lambda sample : _label_to_string(sample, label_names) )
+    else:
+        label_names = list(np.unique(dataset['completion']))
+        label_names = [n.strip() for n in label_names]
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
