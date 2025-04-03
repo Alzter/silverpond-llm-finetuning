@@ -94,7 +94,7 @@ class EvaluationResult:
         """
         return timedelta(seconds=self.total_time_elapsed)
     
-    def save(self, output_dir : str | None = None) -> None:
+    def save(self, output_dir : str = "output") -> None:
         """
         Creates human-readable results from raw LLM evaluation data.
 
@@ -113,16 +113,17 @@ class EvaluationResult:
         Useful if you want to retrieve exact values from the output for future analysis.
 
         Args:
-            output_dir (str, optional): Which folder to save the results into. Defaults to ``output/<self.config.name>``.
+            output_dir (str, optional): Which folder to save the results into. Defaults to "output".
         """
         
-        if output_dir is None:
-            # Make result name file safe
-            result_path_name = self.config.name.lower().strip().replace(" ", "_")
-            # Remove all non-alphanumeric characters
-            result_path_name = "".join(c for c in result_path_name if c.isalnum() or c in ["-", "_", " "])
+        # Make result name file safe
+        result_path_name = self.config.name.lower().strip().replace(" ", "_")
+        # Remove all non-alphanumeric characters
+        result_path_name = "".join(c for c in result_path_name if c.isalnum() or c in ["-", "_", " "])
 
-            output_dir = os.path.join( "output", result_path_name )
+        if not output_dir:
+            output_dir = result_path_name
+        else: output_dir = os.path.join( output_dir, result_path_name )
 
         # shutil.rmtree(output_dir)
         os.makedirs(output_dir, exist_ok=True)
