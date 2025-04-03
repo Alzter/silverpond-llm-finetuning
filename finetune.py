@@ -1,34 +1,48 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import LoraConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
 from trl import SFTConfig, SFTTrainer
 import numpy as np
+import transformers, torch
 
-def _get_n_samples_per_class(dataset : Dataset, n : int, shuffle:bool=True, seed:int=0) -> Dataset:
+transformers.set_seed(42) # Enable deterministic LLM output
+
+def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, shuffle:bool=True, seed:int=0) -> Dataset:
     """
     Given a dataset, obtain a smaller dataset containing the first **n** samples from each class.
 
     Args:
         dataset (Dataset): The dataset to sample.
+        labels_column (str): The column name for the labels in the dataset.
         n (int): How many samples from each class to extract.
         shuffle (bool): Whether to sort the final result by class or randomly.
-        seed (int): RNG seed.
+        seed (int, optional): RNG seed. Defaults to 0.
 
     Returns:
         Dataset: The sample of the dataset.
     """
-    ds_sorted = dataset.sort('label')
-    _, class_indices = np.unique(ds_sorted['label'], return_index=True)
+
+    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
+
+    ds_sorted = dataset.sort(labels_column) # BUG: This takes forever if done twice on a dataset
+
+    _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
+
+    # Ensure n is not greater than the number of samples per class
+    samples_per_class = np.diff(class_indices).min()
+    n = min(n, samples_per_class)
+    n = max(n, 1)
 
     class_indices = np.array([list(range(index, index + n)) for index in class_indices])
     class_indices = class_indices.flatten()
 
-    sample = dataset.sort('label').select(class_indices)
+    sample = dataset.sort(labels_column).select(class_indices) # BUG: This takes forever if done twice on a dataset
+
     if shuffle: sample = sample.shuffle(seed=seed)
     
     return sample
 
-def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, samples_per_class : int = None) -> Dataset:
+def sample_dataset(dataset : Dataset, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -39,20 +53,26 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
 
     Args:
         dataset (Dataset): The dataset to sample.
-        ratio (float, optional): What percentage of the dataset to sample from 1-0.
-        size (int, optional): Number of items the new dataset should have.
-        samples_per_class (int, optional): Number of items per class the new dataset should have.
+        labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
+        ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
+        size (int, optional): Number of items the new dataset should have. Defaults to None.
+        samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
+        shuffle (bool, optional): Whether to shuffle the dataset before and after sampling it. Defaults to True.
+        seed (int, optional): RNG seed. Defaults to 0.
 
     Returns:
         Dataset: The sample of the dataset.
     """
+    if shuffle: dataset=dataset.shuffle(seed=seed)
 
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
-            dataset[subset] = sample_dataset(dataset[subset], ratio, size, samples_per_class)
+            dataset[subset] = sample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
         return dataset
+
+    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
 
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
@@ -66,7 +86,7 @@ def sample_dataset(dataset : Dataset, ratio : float = None, size : int = None, s
         samples_per_class = dataset.num_rows // len(dataset.features['label'].names)
         samples_per_class = int(samples_per_class * ratio)
 
-    return _get_n_samples_per_class(dataset, samples_per_class)
+    return _get_n_samples_per_class(dataset, samples_per_class, labels_column, shuffle=shuffle, seed=seed)
 
 def _format_dataset(examples : Dataset) -> dict:
     """
@@ -114,26 +134,29 @@ def _label_to_string(sample : dict, class_label_names : list) -> dict:
     sample['completion'] = class_label_names[ int(sample['completion']) ]
     return sample
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str) -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, labels_column : str = "label") -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
     Args:
         dataset (Dataset | DatasetDict): A supervised text-classification dataset.
         text_column (str): The column name for the input text column (X).
-        labels_column (str): The column name for the output label column (y).
+        labels_column (str, optional): The column name for the output label column (y). Defaults to "label".
     
     Returns:
         formatted_dataset (Dataset): The dataset in conversational format.
-        class_labels (list): The list of class label names.
+        label_names (list): The list of class label names.
     """
-
+    
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
         for subset in dataset.keys():
             dataset[subset], label_names = preprocess_dataset(dataset[subset], text_column, labels_column)
         return dataset, label_names
+
+    for column in [text_column, labels_column]:
+        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     # Select only the text and label columns.
     dataset = dataset.select_columns([text_column,labels_column])
@@ -157,17 +180,20 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str, label
 
     return dataset, label_names
 
-def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, save_directory : str) -> None:
-    """_summary_
+def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, output_dir : str | None = None) -> None:
+    """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
-        model (AutoModelForCausalLM): _description_
-        tokenizer (AutoTokenizer): _description_
-        train_dataset (Dataset): _description_
-        lora_config (LoraConfig): _description_
-        sft_config (SFTConfig): _description_
-        save_directory (str): _description_
+        model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+        train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset`` before calling this method.
+        lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
+        sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
+        output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``.
     """
+    if output_dir is None:
+        output_dir = sft_config.output_dir
+    
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
@@ -179,23 +205,57 @@ def finetune_model(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, trai
     )
 
     trainer.train()
-    trainer.save_model(save_directory)
+    trainer.save_model(output_dir)
 
-def _generate_model_prompt(prompt : str, tokenizer : AutoTokenizer) -> str:
-    """_summary_
+def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
+    """
+    Load a finetuned LLM from disk.
 
     Args:
-        prompt (str): _description_
-        tokenizer (AutoTokenizer): _description_
+        model_directory (str): Where to load the fine-tuned model.
+        device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+        quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
 
     Returns:
-        str: _description_
+        model (AutoPeftModelForCausalLM): The fine-tuned LLM.
+        tokenizer (AutoTokenizer): The tokenizer (unchanged from the base model).
     """
-    if type(sentence) is str:
-        sentence = [{"role": "user", "content": sentence}]
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=False,
+        bnb_4bit_compute_dtype=torch.float16
+    ) if quantized else None
+
+    config = PeftConfig.from_pretrained(model_directory)
+
+    tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
+    model = AutoPeftModelForCausalLM.from_pretrained(model_directory, device_map=device_map, quantization_config=bnb_config)
+
+    return (model, tokenizer)
+
+def _format_prompt(prompt : str | dict, tokenizer : AutoTokenizer) -> str:
+    """
+    Convert an LLM prompt into string format with a chat template
+    and special tokens.
+
+    Args:
+        prompt (str | dict): The prompt for the LLM.
+                            You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                            if you want to include a system prompt and/or prior chat history.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+
+    Returns:
+        prompt (str): The prompt with chat template applied converted to string format using special tokens.
+    """
+    if type(prompt) is str:
+        prompt = [{"role": "user", "content": prompt}]
+    
     prompt = tokenizer.apply_chat_template(
-        sentence, tokenize=False, add_generation_prompt=True
+        prompt, tokenize=False, add_generation_prompt=True
     )
+
     return prompt
 
 def generate(
@@ -203,29 +263,37 @@ def generate(
     model : AutoModelForCausalLM,
     tokenizer : AutoTokenizer,
     max_new_tokens : int = 64,
-    skip_special_tokens : bool = True,
     response_only : bool = True,
-    do_sample : bool = True,
-    temperature : float = 0.1
+    skip_special_tokens : bool = True,
+    do_sample : bool = False,
+    temperature : float | None = None,
+    top_p : float | None = None,
+    top_k : float | None = None,
+    kwargs : dict = {}
     ) -> str:
-    """_summary_
+    """
+    Generate an LLM response to a given query.
 
     Args:
-        prompt (str | dict): _description_
-        model (AutoModelForCausalLM): _description_
-        tokenizer (AutoTokenizer): _description_
-        max_new_tokens (int, optional): _description_. Defaults to 64.
-        skip_special_tokens (bool, optional): _description_. Defaults to True.
-        response_only (bool, optional): _description_. Defaults to True.
-        do_sample (bool, optional): _description_. Defaults to True.
-        temperature (float, optional): _description_. Defaults to 0.1.
-
+        prompt (str | dict): The prompt for the LLM.
+                            You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                            if you want to include a system prompt and/or prior chat history.
+        model (AutoModelForCausalLM): The LLM to use. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
+        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+        max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+        response_only (bool, optional): If True, excludes all previous messages from the output. Defaults to True.
+        skip_special_tokens (bool, optional): If True, removes model special tokens from the output. Defaults to True.
+        do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
+        kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
     Returns:
-        str: _description_
+        response (str): The LLM's response.
     """
 
     # Convert user query into a formatted prompt
-    prompt = _generate_model_prompt(prompt, tokenizer=tokenizer)
+    prompt = _format_prompt(prompt, tokenizer=tokenizer)
 
     # Tokenize the formatted prompt
     tokenized_input = tokenizer(prompt,
@@ -237,16 +305,18 @@ def generate(
     generation_output = model.generate(**tokenized_input,
                                        max_new_tokens=max_new_tokens,
                                        do_sample=do_sample,
-                                       temperature=temperature)
+                                       temperature=temperature,
+                                       top_p = top_p,
+                                       top_k = top_k,
+                                       **kwargs)
 
-    # If required, removes the tokens belonging to the prompt
+    # If required, remove the tokens belonging to the prompt
     if response_only:
         input_length = tokenized_input['input_ids'].shape[1]
         generation_output = generation_output[:, input_length:]
     
-    # Decodes the tokens back into text
-    output = tokenizer.batch_decode(generation_output, 
-                                    skip_special_tokens=skip_special_tokens)[0]
+    # Decode the tokens back into text
+    output = tokenizer.batch_decode(generation_output, skip_special_tokens=skip_special_tokens)[0]
     return output
 
 
