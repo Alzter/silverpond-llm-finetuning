@@ -139,27 +139,19 @@ class EvaluationResult:
         classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
         classif_report = pd.DataFrame(classif_report).transpose()
 
-        # Determine how many class labels will be shown in the output
-        # by finding how many were used in the result
-        threshold = np.max([y_pred, y_true]) + 1
-        label_names = label_names[0:threshold]
-
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
+        cm_display_args = {
+            "cmap" : plt.cm.Blues,
+            "xticks_rotation" : "vertical",
+            "text_kw":{'fontsize': 6},
+            "values_format":'.0%'
+        }
+        
         try:
-            disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(
-                cmap = plt.cm.Blues,
-                xticks_rotation='vertical',
-                text_kw={'fontsize': 6},
-                values_format='.0%'
-            )
+            disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(**cm_display_args)
         except Exception:
-            disp = ConfusionMatrixDisplay(cm).plot(
-                cmap = plt.cm.Blues,
-                xticks_rotation='vertical',
-                text_kw={'fontsize': 6},
-                values_format='.0%'
-            )
+            disp = ConfusionMatrixDisplay(cm).plot(**cm_display_args)
 
         disp.ax_.set_title( self.config.name )
 
