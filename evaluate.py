@@ -238,32 +238,31 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
         if model_response == label_truncated:
             return i
     
-    # Concatenate all label names using boolean OR.
-    match = "|".join(label_names).lower().replace(" ", r"\s*")
+    try:
+        # Concatenate all label names using boolean OR.
+        match = "|".join(label_names).lower().replace(" ", r"\s*")
 
-    # Find all instances of label name strings within the base string.
-    matches = re.findall(match, model_response)
+        # Find all instances of label name strings within the base string.
+        matches = re.findall(match, model_response)
 
-    # If the string contains at least one instance of a class label:
-    if len(matches) > 0:
-        # Get the last matching label from the string.
-        final_match = matches[-1]
+        # If the string contains at least one instance of a class label:
+        if len(matches) > 0:
+            # Get the last matching label from the string.
+            final_match = matches[-1]
 
-        # If this didn't return a string, fail
-        if type(final_match) is not str:
-            return len(label_names) - 1
-
-        # Remove all capitalisation, non-alphabetic characters, and whitespace
-        labels_sanitised = [re.sub("[^a-z]", "", label.lower()) for label in label_names]
-        match_sanitised = re.sub("[^a-z]", "", final_match.lower())
-
-        # Return the matching class ID for the label.
-        class_id = labels_sanitised.index(match_sanitised)
-        return class_id
-
-    else:
-        # If no class label is found in the LLM text, return the last label ("I don't know").
-        return len(label_names) - 1
+            # Remove all capitalisation, non-alphabetic characters, and whitespace
+            labels_sanitised = [re.sub("[^a-z]", "", label.lower()) for label in label_names]
+            match_sanitised = re.sub("[^a-z]", "", final_match.lower())
+            
+            # Return the matching class ID for the label.
+            class_id = labels_sanitised.index(match_sanitised)
+            return class_id
+            
+    except Exception:
+        pass
+    
+    # If no class label is found in the LLM text, return the last label ("I don't know").
+    return len(label_names) - 1
 
 def evaluate(
     model : AutoModelForCausalLM,
