@@ -1,6 +1,6 @@
 DBPEDIA = {
     # Zero-shot prompt to classify articles and return their category name.
-    ZERO_SHOT : """You are an expert at classifying articles into the following categories:
+    "ZERO_SHOT" : """You are an expert at classifying articles into the following categories:
 
     CATEGORIES:
     0. Company
@@ -23,7 +23,7 @@ DBPEDIA = {
 }
 
 OSHA = {
-    ZERO_SHOT : """You are an expert at classifying OSHA injury reports into the following categories:
+    "ZERO_SHOT" : """You are an expert at classifying OSHA injury reports into the following categories:
 
     CATEGORIES:
     0. Abrasions, scratches
