@@ -234,8 +234,11 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
     # procedure by using lower max tokens.
     for i, label in enumerate(label_names):
         
-        label_truncated = label.lower().replace(" ", "")[0:len(model_response)]
-        if model_response == label_truncated:
+        response_trimmed = model_response.replace(" ", "")
+        label = label.lower().replace(" ", "")
+        label_truncated = label[0:len(model_response)]
+        
+        if response_trimmed == label_truncated:
             return i
     
     try:
