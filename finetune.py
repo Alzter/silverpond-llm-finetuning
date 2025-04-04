@@ -263,9 +263,11 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     # If the dataset is actually a container of datasets,
     # use recursion to preprocess all sub-datasets
     if type(dataset) is DatasetDict:
+        label_names = []
         dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
-            dataset[subset], label_names = preprocess_dataset(dataset[subset], text_column, labels_column)
+            dataset[subset], new_labels = preprocess_dataset(dataset[subset], text_column, labels_column)
+            if len(new_labels) > len(label_names): label_names = new_labels
         return dataset, label_names
 
     for column in [text_column, labels_column]:
@@ -278,28 +280,18 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     dataset = dataset.rename_column(text_column, "prompt")
     dataset = dataset.rename_column(labels_column, "completion")
 
-    label_names = []
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
-        new_labels = [n.strip() for n in dataset.features['completion'].names]
-
-        print(f"A: {len(label_names)}")
-        print(f"B: {len(new_labels)}")
-        print(len(new_labels) > len(label_names))
-
-        if len(new_labels) > len(label_names): label_names = new_labels
-
+        label_names = [n.strip() for n in dataset.features['completion'].names]
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
         # Replace all class label IDs with label names.
         dataset = dataset.map( lambda sample : _label_to_string(sample, label_names) )
     else:
-        new_labels = [n.strip() for n in list(np.unique(dataset['completion']))]
-        if len(new_labels) > len(label_names): label_names = new_labels
+        label_names = [n.strip() for n in list(np.unique(dataset['completion']))]
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
-    if len(new_labels) > len(label_names): label_names = new_labels
 
     return dataset, label_names
 
