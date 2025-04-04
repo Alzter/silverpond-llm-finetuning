@@ -141,11 +141,15 @@ class EvaluationResult:
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
+        # If we have more than 15 labels, hide label text
+        hide_text = len(label_names) > 15
+
         cm_display_args = {
             "cmap" : plt.cm.Blues,
             "xticks_rotation" : "vertical",
             "text_kw":{'fontsize': 6},
-            "values_format":'.0%'
+            "values_format":'.0%',
+            "include_values":(not hide_text)
         }
         
         try:
@@ -154,6 +158,10 @@ class EvaluationResult:
             disp = ConfusionMatrixDisplay(cm).plot(**cm_display_args)
 
         disp.ax_.set_title( self.config.name )
+
+        if hide_text:
+            disp.ax_.set_xticks([])
+            disp.ax_.set_yticks([])
 
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
