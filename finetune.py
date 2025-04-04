@@ -278,24 +278,22 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     dataset = dataset.rename_column(text_column, "prompt")
     dataset = dataset.rename_column(labels_column, "completion")
 
+    label_names = []
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
-        label_names = dataset.features['completion'].names
-        print(f"A: {len(label_names)}")
-        label_names = [n.strip() for n in label_names]
-        print(f"B: {len(label_names)}")
+        new_labels = [n.strip() for n in dataset.features['completion'].names]
+        if len(new_labels) > len(label_names): label_names = new_labels
+
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
         # Replace all class label IDs with label names.
         dataset = dataset.map( lambda sample : _label_to_string(sample, label_names) )
     else:
-        label_names = list(np.unique(dataset['completion']))
-        print(f"C: {len(label_names)}")
-        label_names = [n.strip() for n in label_names]
-        print(f"D: {len(label_names)}")
+        new_labels = [n.strip() for n in list(np.unique(dataset['completion']))]
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
+    if len(new_labels) > len(label_names): label_names = new_labels
 
     return dataset, label_names
 
