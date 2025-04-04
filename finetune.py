@@ -79,7 +79,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         n = min(n, labels.size)
         
         # Get the top n labels from the dataset as a list
-        top_n_labels = labels.value_counts().iloc[0:n]
+        top_n_labels = labels.value_counts().iloc[0:n].keys().to_list()
     
     # If the dataset is actually a container of datasets,
     # use recursion to sample all sub-datasets
@@ -99,8 +99,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         label_names = dataset.features[labels_column].names
 
         # Select only the labels from the top n classes.
-        indices = top_n_labels.keys().to_list()
-        new_names = [label_names[i] for i in indices]
+        new_names = [label_names[i] for i in top_n_labels]
 
         # Convert class label column into raw strings.
         dataset = dataset.cast_column(labels_column, Value(dtype='string'))
