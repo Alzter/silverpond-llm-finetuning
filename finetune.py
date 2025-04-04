@@ -80,10 +80,6 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         
         # Get the top n labels from the dataset as a list
         top_n_labels = labels.value_counts().iloc[0:n].keys().to_list()
-
-        print(top_n_labels)
-        print(len(top_n_labels))
-        print(n)
     
     # If the dataset is actually a container of datasets,
     # use recursion to sample all sub-datasets
@@ -285,14 +281,18 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
         label_names = dataset.features['completion'].names
+        print(f"A: {len(label_names)}")
         label_names = [n.strip() for n in label_names]
+        print(f"B: {len(label_names)}")
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
         # Replace all class label IDs with label names.
         dataset = dataset.map( lambda sample : _label_to_string(sample, label_names) )
     else:
         label_names = list(np.unique(dataset['completion']))
+        print(f"C: {len(label_names)}")
         label_names = [n.strip() for n in label_names]
+        print(f"D: {len(label_names)}")
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
