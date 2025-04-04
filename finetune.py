@@ -282,9 +282,12 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     # Map the class label column from integer to string.
     if type(dataset.features['completion']) is ClassLabel:
         new_labels = [n.strip() for n in dataset.features['completion'].names]
-        if len(new_labels) > len(label_names): label_names = new_labels
 
-        print(len(new_labels))
+        print(f"A: {len(label_names)}")
+        print(f"B: {len(new_labels)}")
+        print(len(new_labels) > len(label_names))
+
+        if len(new_labels) > len(label_names): label_names = new_labels
 
         # Cast label column from int to str.
         dataset = dataset.cast_column("completion", Value(dtype='string'))
@@ -293,7 +296,6 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     else:
         new_labels = [n.strip() for n in list(np.unique(dataset['completion']))]
         if len(new_labels) > len(label_names): label_names = new_labels
-        print(len(new_labels))
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
