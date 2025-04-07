@@ -143,19 +143,19 @@ class EvaluationResult:
 
         # If we have more than 15 labels, hide label text
         hide_text = len(label_names) > 15
-
-        cm_display_args = {
-            "cmap" : plt.cm.Blues,
-            "xticks_rotation" : "vertical",
-            "text_kw":{'fontsize': 6},
-            "values_format":'.0%',
-            "include_values":(not hide_text)
-        }
         
         try:
-            disp = ConfusionMatrixDisplay(cm, display_labels=label_names).plot(**cm_display_args)
+            disp = ConfusionMatrixDisplay(cm, display_labels=label_names)
         except Exception:
-            disp = ConfusionMatrixDisplay(cm).plot(**cm_display_args)
+            disp = ConfusionMatrixDisplay(cm)
+        
+        disp.plot(
+            cmap = plt.cm.Blues,
+            xticks_rotation = "vertical",
+            text_kw = {'fontsize': 6},
+            values_format = '.0%',
+            include_values = (not hide_text)
+        )
 
         disp.ax_.set_title( self.config.name )
 

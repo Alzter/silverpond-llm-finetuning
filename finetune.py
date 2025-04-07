@@ -309,8 +309,9 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
     if output_dir is None:
         output_dir = sft_config.output_dir
     
-    model = prepare_model_for_kbit_training(model)
-    model = get_peft_model(model, lora_config)
+    if type(model) is not AutoPeftModelForCausalLM:
+        model = prepare_model_for_kbit_training(model)
+        model = get_peft_model(model, lora_config)
 
     trainer = SFTTrainer(
         model=model,
