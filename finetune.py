@@ -52,7 +52,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     Given a dataset, limit the total number of classes to the top ``n`` most common.
     All samples not within the top ``n`` classes are removed.
     
-    NOTE: This does *not* adjust the number of samples *per* class to be equal; use ``sample_dataset()`` for that.
+    NOTE: This does *not* adjust the number of samples *per* class to be equal; use ``undersample_dataset()`` for that.
 
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
@@ -150,7 +150,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     
     return sample
 
-def sample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -177,7 +177,7 @@ def sample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "label
     if type(dataset) is DatasetDict:
         dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
-            dataset[subset] = sample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
+            dataset[subset] = undersample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
     if shuffle: dataset=dataset.shuffle(seed=seed)
