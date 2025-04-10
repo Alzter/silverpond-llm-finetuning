@@ -33,7 +33,7 @@ def test_evaluate_llm(llm, eval_dataset):
 
     eval_config = ev.EvaluationConfig(
         name="Zero-shot",
-        prompt = model_prompts.PROMPT_ZEROSHOT,
+        prompt = model_prompts.DBPEDIA["ZERO_SHOT"],
         max_tokens = 3
     )
 
