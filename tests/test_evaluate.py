@@ -23,7 +23,7 @@ def llm():
 @pytest.fixture
 def eval_dataset():
     eval_data = load_dataset("fancyzhx/dbpedia_14", split="test")
-    eval_data = ft.sample_dataset(eval_data, labels_column="label", samples_per_class=2)
+    eval_data = ft.undersample_dataset(eval_data, labels_column="label", samples_per_class=2)
     eval_data, label_names = ft.preprocess_dataset(eval_data, text_column="content", labels_column="label")
     return (eval_data, label_names)
 

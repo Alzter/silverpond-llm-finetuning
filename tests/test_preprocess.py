@@ -14,7 +14,7 @@ def test_dataset():
 def test_resize_datadict(full_dataset):
     size = np.array(list(full_dataset.shape.values()))[:,0]
 
-    sample = ft.sample_dataset(full_dataset, ratio=0.5)
+    sample = ft.undersample_dataset(full_dataset, ratio=0.5)
 
     new_size = np.array(list(sample.shape.values()))[:,0]
 
@@ -23,23 +23,23 @@ def test_resize_datadict(full_dataset):
 def test_resize_dataset(test_dataset):
     size = len(test_dataset)
 
-    sample_ratio = ft.sample_dataset(test_dataset, ratio=0.5)
+    sample_ratio = ft.undersample_dataset(test_dataset, ratio=0.5)
     assert len(sample_ratio) == size // 2
 
-    sample_size = ft.sample_dataset(test_dataset, size=1400)
+    sample_size = ft.undersample_dataset(test_dataset, size=1400)
     assert len(sample_size) == 1400
 
-    sample_per_class = ft.sample_dataset(test_dataset, samples_per_class=10)
+    sample_per_class = ft.undersample_dataset(test_dataset, samples_per_class=10)
     assert len(sample_per_class) == 14 * 10
 
 def test_resize_dataset_requires_method(test_dataset):
     with pytest.raises(ValueError):
-        ft.sample_dataset(test_dataset)
+        ft.undersample_dataset(test_dataset)
 
 def test_resize_dataset_has_no_side_effects(test_dataset):
     expected = len(test_dataset)
 
-    ft.sample_dataset(test_dataset, ratio=0.1)
+    ft.undersample_dataset(test_dataset, ratio=0.1)
 
     actual = len(test_dataset)
 
@@ -47,7 +47,7 @@ def test_resize_dataset_has_no_side_effects(test_dataset):
 
 def test_preprocess_datadict(full_dataset):
     subsets = ["train", "test"]
-    full_dataset = ft.sample_dataset(full_dataset, samples_per_class=10)
+    full_dataset = ft.undersample_dataset(full_dataset, samples_per_class=10)
     processed_datadict, _ = ft.preprocess_dataset(full_dataset, "content", "label")
 
     for subset in subsets:
