@@ -53,6 +53,8 @@ pkgs.mkShell {
             trl
             scikit-learn
             pytest
+            openpyxl
+            xlrd
 #             tyro
 #             cut-cross-entropy
 #             unsloth
