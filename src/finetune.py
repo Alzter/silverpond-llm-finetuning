@@ -12,14 +12,14 @@ import warnings
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str, test_size : float | None = 0.1) -> Dataset:
+def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str | list, test_size : float | None = 0.1) -> Dataset:
     """
     Convert a DataFrame into a Dataset for pre-processing.
 
     Args:
         df (DataFrame): The DataFrame to convert.
         text_column (str): The column name for the input text column (X).
-        labels_column (str): The column name for the output label column (y). Labels *must* be a string, not a class ID.
+        labels_column (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
         test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
 
     Returns:
@@ -30,20 +30,20 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_colu
     df[labels_column] = df[labels_column].map(lambda x : x.strip() if type(x) is str else x)
 
     # Delete any empty values
-    df = df.dropna(subset=[text_column, labels_column])
+    df = df.dropna(subset=[text_column, *labels_column])
     
-    data = {
-        "text" : df[text_column].to_list(),
-        "label" : df[labels_column].to_list()
-    }
+    data = {"text" : df[text_column].to_list()}
     
+    for label in labels_column:
+        data[label] = df[label].to_list()
+
     ds = Dataset.from_dict(data)
-    ds = ds.class_encode_column("label") # Convert label from Value to ClassLabel
+
+    for label in labels_column:
+        ds = ds.class_encode_column(label) # Convert labels from Value to ClassLabel
 
     if test_size is not None:
         ds = ds.train_test_split(test_size=test_size)
-    
-    #ds = ds.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
 
     return ds
 

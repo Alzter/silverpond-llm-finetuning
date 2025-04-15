@@ -11,6 +11,10 @@ def full_dataset():
 def test_dataset():
     return load_dataset("fancyzhx/dbpedia_14", split="test")
 
+# @pytest.fixture
+# def multiclass_dataset():
+#     raise NotImplementedError
+
 def test_resize_datadict(full_dataset):
     size = np.array(list(full_dataset.shape.values()))[:,0]
 
