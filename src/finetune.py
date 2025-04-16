@@ -12,7 +12,7 @@ import warnings
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str | list, test_size : float | None = 0.1) -> Dataset:
+def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True) -> Dataset:
     """
     Convert a DataFrame into a Dataset for pre-processing.
 
@@ -21,28 +21,37 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_colu
         text_column (str): The column name for the input text column (X).
         labels_column (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
         test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
+        encode_labels (bool, optional): If true, converts all class label columns in the Dataset to ClassLabel data type. Defaults to True.
 
     Returns:
         Dataset: The dataset.
     """
     df = df.copy() # Copy the dataframe to prevent the original being modified
 
-    df[labels_column] = df[labels_column].map(lambda x : x.strip() if type(x) is str else x)
+    # If we only have one label, rename the labels column to 'label'
+    if type(labels_column) is str:
+        df = df.rename(columns={labels_column : "label"})
+        labels_column = ["label"]
 
-    # Delete any empty values
+    # Remove all leading/trailing whitespace in any string class labels.
+    for label in labels_column:
+        df[label] = df[label].map(lambda x : x.strip() if type(x) is str else x)
+
+    # Delete any empty values.
     df = df.dropna(subset=[text_column, *labels_column])
     
     data = {"text" : df[text_column].to_list()}
-    
+
     for label in labels_column:
         data[label] = df[label].to_list()
 
     ds = Dataset.from_dict(data)
 
-    for label in labels_column:
-        ds = ds.class_encode_column(label) # Convert labels from Value to ClassLabel
+    if encode_labels:
+        for label in labels_column:
+            ds = ds.class_encode_column(label) # Convert labels from Value to ClassLabel
 
-    if test_size is not None:
+    if test_size: # If test_size is not None and is > 0
         ds = ds.train_test_split(test_size=test_size)
 
     return ds
@@ -94,11 +103,9 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
 
     # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
     if type(dataset.features[labels_column]) is ClassLabel:
-
-        # Convert class label column into raw strings.
-        label_names = dataset.features[labels_column].names
-        dataset = dataset.cast_column(labels_column, Value(dtype='string'))
-        dataset = dataset.map( lambda sample : _label_to_string(sample, label_names, label_column=labels_column) )
+        
+        # Convert class label column into raw strings
+        dataset, label_names = class_decode_column(dataset, labels_column)
         
         # Cast class label column back into a ClassLabel.
         dataset = dataset.class_encode_column(labels_column)
@@ -229,7 +236,7 @@ def _format_dataset(examples : Dataset) -> dict:
         ]
         return {'messages': converted_sample}
 
-def _label_to_string(sample : dict, class_label_names : list, label_column : str = "completion") -> dict:
+def _sample_label_to_string(sample : dict, class_label_names : list, label_column : str = "completion") -> dict:
     """
     Given a sample from a supervised text classification dataset
     in prompt/completion format, replace the class label ID with
@@ -245,6 +252,36 @@ def _label_to_string(sample : dict, class_label_names : list, label_column : str
     """
     sample[label_column] = class_label_names[ int(sample[label_column]) ]
     return sample
+
+def class_decode_column(dataset : Dataset, labels_column : str, strip : bool = True) -> tuple[Dataset, list[str]]:
+    """Given a Dataset, cast a given column from a ClassLabel to a Value with string data type.
+
+    Args:
+        dataset (Dataset): The dataset.
+        labels_column (str): Which column to convert from ClassLabel to string.
+        strip (bool, optional): Whether to strip the list of all label names to remove duplicates. Defaults to True.
+
+    Returns:
+        dataset (Dataset): The dataset with labels_column converted from ClassLabel to string.
+        label_names (list[str]): List of all unique label names from the ClassLabel.
+    """
+    
+    # Map the class label column from integer to string.
+    if type(dataset.features[labels_column]) is ClassLabel:
+        label_names = dataset.features[labels_column].names
+        if strip: label_names = [n.strip() for n in label_names]
+
+        # Cast label column from int to str.
+        dataset = dataset.cast_column(labels_column, Value(dtype='string'))
+
+        # Replace all class label IDs with label names.
+        dataset = dataset.map( lambda sample : _sample_label_to_string(sample, label_names, label_column=labels_column) )
+    else:
+        label_names = dataset[labels_column]
+        if strip: label_names = [n.strip() for n in label_names]
+        label_names = list(np.unique(label_names))
+    
+    return dataset, list(label_names)
 
 def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "text", labels_column : str = "label") -> tuple[Dataset, list]:
     """
@@ -281,14 +318,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
     dataset = dataset.rename_column(labels_column, "completion")
 
     # Map the class label column from integer to string.
-    if type(dataset.features['completion']) is ClassLabel:
-        label_names = [n.strip() for n in dataset.features['completion'].names]
-        # Cast label column from int to str.
-        dataset = dataset.cast_column("completion", Value(dtype='string'))
-        # Replace all class label IDs with label names.
-        dataset = dataset.map( lambda sample : _label_to_string(sample, label_names) )
-    else:
-        label_names = [n.strip() for n in list(np.unique(dataset['completion']))]
+    dataset, label_names = class_decode_column(dataset, "completion")
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])

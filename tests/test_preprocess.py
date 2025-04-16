@@ -1,8 +1,13 @@
 import pytest
 import finetune as ft
-from datasets import load_dataset, ClassLabel
+from datasets import load_dataset, ClassLabel, Value
 import numpy as np
+import pandas as pd
 
+@pytest.fixture()
+def csv_dataset():
+    return pd.read_csv("tests/test_data.csv", low_memory=False)
+    
 @pytest.fixture()
 def full_dataset():
     return load_dataset("fancyzhx/dbpedia_14")
@@ -14,6 +19,54 @@ def test_dataset():
 # @pytest.fixture
 # def multiclass_dataset():
 #     raise NotImplementedError
+
+def test_convert_csv_to_dataset(csv_dataset):
+    text_column = "Final Narrative"
+    labels_column = "NatureTitle"
+
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=False)
+
+    assert dataset.column_names == ['text', 'label'], "The converted dataset should have 'text' and 'label' features."
+    assert len(dataset["text"]) == len(csv_dataset[text_column]), "The 'text' feature should correspond to the text column of the dataset."
+    assert len(dataset["label"]) == len(csv_dataset[labels_column]), "The 'label' feature should correspond to the label column of the dataset."
+
+def test_class_encode_decode(csv_dataset):
+    text_column = "Final Narrative"
+    labels_column = "NatureTitle"
+
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=True)
+    dataset, label_names = ft.class_decode_column(dataset, "label", strip=False)
+
+    original = list(csv_dataset[labels_column])
+    new = list(dataset["label"])
+
+    assert len(original) == len(new), "Encoding and then decoding a label column should return it to its original state"
+    #assert list(dataset['label']) == list(csv_dataset[labels_column]), "Encoding and then decoding a label column should return it to its original state"
+
+def test_decode_classlabel(test_dataset):
+    assert type(test_dataset.features["label"]) is ClassLabel, "The label column should start as a ClassLabel"
+    old_values = test_dataset["label"]
+
+    test_dataset, label_names = ft.class_decode_column(test_dataset, "label")
+
+    assert type(test_dataset.features["label"]) is Value, "After class decoding, the class label should be a Value with dtype string"
+    assert test_dataset.features['label'].dtype == 'string', "After class decoding, the class label should be a Value with dtype string"
+    assert type(test_dataset['label'][0]) is str, "After class decoding, the class label should be a Value with dtype string"
+
+    new_values = test_dataset["label"]
+
+    assert len(old_values) == len(new_values), "The length of the decoded class labels should be identical to the encoded ones"
+
+    unique_values = list( np.unique( [n.strip() for n in new_values if type(n) is str] ) )
+
+    label_names.sort()
+    unique_values.sort()
+
+    print(label_names)
+    print(unique_values)
+
+    #tm.assert_series_equal(label_names, csv_dataset[labels_column])
+    assert label_names == unique_values, "The list label_names should contain all unique values for the class label"
 
 def test_resize_datadict(full_dataset):
     size = np.array(list(full_dataset.shape.values()))[:,0]
