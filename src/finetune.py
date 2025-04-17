@@ -9,6 +9,7 @@ from pandas import DataFrame
 from copy import copy
 import math
 import warnings
+import json
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
@@ -282,6 +283,46 @@ def class_decode_column(dataset : Dataset, labels_column : str, strip : bool = T
         label_names = list(np.unique(label_names))
     
     return dataset, list(label_names)
+
+def _combine_columns_as_json(sample : dict, columns_to_combine : list[str], combined_column_name : str = "text") -> dict:
+    """Given a row from a Dataset, combine many columns into a new column representing the columns as a JSON string.
+
+    Args:
+        sample (dict): The data sample.
+        columns_to_combine (list[str]): List of column names to combine.
+        combined_column_name (str, optional): The name of the new combined column. Defaults to "text".
+
+    Returns:
+        dict: The row with combined columns.
+    """
+    combined = {col: sample[col] for col in columns_to_combine}
+    return {combined_column_name: json.dumps(combined)}
+
+def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_name = "text", delete_columns : bool = True) -> Dataset | DatasetDict:
+    """Given a Dataset, combine many columns into one new column where each entry is a JSON string with the values of those columns.
+
+    Args:
+        dataset (Dataset | DatasetDict): The dataset.
+        columns (list): The list of columns to combine.
+        new_column_name (str, optional): The name of the new combined column. Defaults to "text".
+        delete_columns (bool, optional): Whether to delete the original columns after combination. Defaults to True.
+
+    Returns:
+        Dataset | DatasetDict: The dataset with all columns combined into one.
+    """
+
+    # If the dataset is actually a container of datasets,
+    # use recursion to preprocess all sub-datasets
+    if type(dataset) is DatasetDict:
+        dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
+        for subset in dataset.keys():
+            dataset[subset] = combine_columns(dataset[subset], columns, new_column_name, delete_columns)
+        return dataset
+
+    dataset = dataset.map(lambda x: _combine_columns_as_json(x, columns, new_column_name))
+    if delete_columns: dataset = dataset.remove_columns(columns)
+
+    return dataset
 
 def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "text", labels_column : str = "label") -> tuple[Dataset, list]:
     """

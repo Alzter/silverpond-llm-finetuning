@@ -3,6 +3,7 @@ import finetune as ft
 from datasets import load_dataset, ClassLabel, Value
 import numpy as np
 import pandas as pd
+import json
 
 @pytest.fixture()
 def csv_dataset():
@@ -42,6 +43,24 @@ def test_class_encode_decode(csv_dataset):
 
     assert len(original) == len(new), "Encoding and then decoding a label column should return it to its original state"
     #assert list(dataset['label']) == list(csv_dataset[labels_column]), "Encoding and then decoding a label column should return it to its original state"
+
+def test_combine_features(test_dataset):
+    columns = ["title", "content"]
+    combined = ft.combine_columns(test_dataset, columns, combined_column_name = "text")
+
+    subset = test_dataset.select_columns(columns)
+
+    assert len(combined["text"]) == len(subset), "The combined column should have the same number of elements as its constituents"
+
+    expected = json.dumps(subset[0])
+    actual = combined[0]["text"]
+
+    assert expected == actual, "The contents of the combined column should be a JSON string containing the composite columns"
+
+    expected = json.dumps(subset[-1])
+    actual = combined[-1]["text"]
+
+    assert expected == actual, "The contents of the combined column should be a JSON string containing the composite columns"
 
 def test_decode_classlabel(test_dataset):
     assert type(test_dataset.features["label"]) is ClassLabel, "The label column should start as a ClassLabel"
