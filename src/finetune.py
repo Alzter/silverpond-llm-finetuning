@@ -100,7 +100,11 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         # Ensure n is <= maximum number of class labels
         for label in labels_column:
             labels = pd.Series(main_dataset[label])
-            n = min(n, labels.unique().size)
+
+            num_labels = labels.unique().size
+            if n > num_labels:
+                warnings.warn(f"\nCannot select top {n} classes from the dataset because the label {label} only has {num_labels} classes.\nProceeding with {num_labels} classes...\n")
+                n = num_labels
         
         # Get the top n labels from the dataset as a list
         
