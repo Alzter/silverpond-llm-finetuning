@@ -13,13 +13,13 @@ import json
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True) -> Dataset:
+def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True) -> Dataset:
     """
     Convert a DataFrame into a Dataset for pre-processing.
 
     Args:
         df (DataFrame): The DataFrame to convert.
-        text_column (str): The column name for the input text column (X).
+        text_column (str | list): The column name(s) for the input text column (X).
         labels_column (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
         test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
         encode_labels (bool, optional): If true, converts all class label columns in the Dataset to ClassLabel data type. Defaults to True.
@@ -34,14 +34,22 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str, labels_colu
         df = df.rename(columns={labels_column : "label"})
         labels_column = ["label"]
 
-    # Remove all leading/trailing whitespace in any string class labels.
+    # If we only have one input feature, rename the inputs column to 'text'
+    if type(text_column) is str:
+        df = df.rename(columns={text_column : "text"})
+        text_column = ["text"]
+
+    # Remove all leading/trailing whitespace within the class labels.
     for label in labels_column:
         df[label] = df[label].map(lambda x : x.strip() if type(x) is str else x)
 
     # Delete any empty values.
-    df = df.dropna(subset=[text_column, *labels_column])
+    df = df.dropna(subset=[*text_column, *labels_column])
     
-    data = {"text" : df[text_column].to_list()}
+    data = {}
+
+    for feature in text_column:
+        data[feature] = df[feature].to_list()
 
     for label in labels_column:
         data[label] = df[label].to_list()

@@ -17,10 +17,6 @@ def full_dataset():
 def test_dataset():
     return load_dataset("fancyzhx/dbpedia_14", split="test")
 
-# @pytest.fixture
-# def multiclass_dataset():
-#     raise NotImplementedError
-
 def test_convert_csv_to_dataset(csv_dataset):
     text_column = "Final Narrative"
     labels_column = "NatureTitle"
@@ -30,6 +26,14 @@ def test_convert_csv_to_dataset(csv_dataset):
     assert dataset.column_names == ['text', 'label'], "The converted dataset should have 'text' and 'label' features."
     assert len(dataset["text"]) == len(csv_dataset[text_column]), "The 'text' feature should correspond to the text column of the dataset."
     assert len(dataset["label"]) == len(csv_dataset[labels_column]), "The 'label' feature should correspond to the label column of the dataset."
+
+def test_convert_csv_with_multiple_inputs(csv_dataset):
+    text_columns = ["Final Narrative", "Inspection"]
+    labels_column = "NatureTitle"
+
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_columns, labels_column, test_size=0, encode_labels=False)
+
+    assert dataset.column_names == ["Final Narrative", "Inspection", "label"], "The converted dataset should preserve the multiple input features."
 
 def test_class_encode_decode(csv_dataset):
     text_column = "Final Narrative"
