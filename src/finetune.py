@@ -13,7 +13,7 @@ import json
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True) -> Dataset:
+def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True, dropna : bool = True) -> Dataset:
     """
     Convert a DataFrame into a Dataset for pre-processing.
 
@@ -23,6 +23,7 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labe
         labels_column (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
         test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
         encode_labels (bool, optional): If true, converts all class label columns in the Dataset to ClassLabel data type. Defaults to True.
+        dropna (bool, optional): If true, removes all rows which contain any null values. Defaults to True.
 
     Returns:
         Dataset: The dataset.
@@ -44,7 +45,7 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labe
         df[label] = df[label].map(lambda x : x.strip() if type(x) is str else x)
 
     # Delete any empty values.
-    df = df.dropna(subset=[*text_column, *labels_column])
+    if dropna: df = df.dropna(subset=[*text_column, *labels_column])
     
     data = {}
 
@@ -339,7 +340,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
     Args:
         dataset (Dataset | DatasetDict): A supervised text-classification dataset.
         text_column (str | list): The column name(s) for the input text column (X).
-        labels_column (str, optional): The column name for the output label column (y). Defaults to "label".
+        labels_column (str, optional): The column name(s) for the output label column (y). Defaults to "label".
     
     Returns:
         formatted_dataset (Dataset): The dataset in conversational format.
@@ -358,12 +359,13 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
 
     # Convert text_column into a list if it is not already
     if type(text_column) is str: text_column = [text_column]
+    if type(labels_column) is str: labels_column = [labels_column]
 
-    for column in [*text_column, labels_column]:
+    for column in [*text_column, *labels_column]:
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     # Select only the text and label columns.
-    dataset = dataset.select_columns([*text_column,labels_column])
+    dataset = dataset.select_columns([*text_column,*labels_column])
     
     # If there are multiple input text features, combine them into one using JSON formatting
     if len(text_column) > 1:
@@ -374,6 +376,13 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
     else:
         # Convert text_column into a string pointing to the combined column
         text_column = text_column[0]
+
+    # If there are multiple labels, combine them into one using JSON formatting
+    if len(labels_column) > 1:
+        dataset = combine_columns(dataset, labels_column, new_column_name="label")
+        labels_column = "label"
+    else:
+        labels_column = labels_column[0]
 
     # Convert the dataset into prompt/completion format.
     dataset = dataset.rename_column(text_column, "prompt")

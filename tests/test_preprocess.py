@@ -21,25 +21,43 @@ def test_convert_csv_to_dataset(csv_dataset):
     text_column = "Final Narrative"
     labels_column = "NatureTitle"
 
-    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=False)
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=False, dropna=False)
 
     assert dataset.column_names == ['text', 'label'], "The converted dataset should have 'text' and 'label' features."
     assert len(dataset["text"]) == len(csv_dataset[text_column]), "The 'text' feature should correspond to the text column of the dataset."
     assert len(dataset["label"]) == len(csv_dataset[labels_column]), "The 'label' feature should correspond to the label column of the dataset."
 
+    end = len(dataset) - 1
+
+    assert(dataset['text'][0] == csv_dataset[text_column][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset['label'][0] == csv_dataset[labels_column][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset['text'][end] == csv_dataset[text_column][end]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset['label'][end] == csv_dataset[labels_column][end]), "The Dataset should have the same contents as the DataFrame"
+
 def test_convert_csv_with_multiple_inputs(csv_dataset):
     text_columns = ["Final Narrative", "Inspection"]
     labels_column = "NatureTitle"
 
-    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_columns, labels_column, test_size=0, encode_labels=False)
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_columns, labels_column, test_size=0, encode_labels=False, dropna=False)
 
     assert dataset.column_names == ["Final Narrative", "Inspection", "label"], "The converted dataset should preserve the multiple input features."
+
+    assert len(dataset[text_columns[0]]) == len(csv_dataset[text_columns[0]]), "Datasets should have same size"
+    assert len(dataset[text_columns[-1]]) == len(csv_dataset[text_columns[-1]]), "Datasets should have same size"
+    assert len(dataset["label"]) == len(csv_dataset[labels_column]), "Datasets should have same size"
+
+    assert(dataset[ text_columns[0] ][0] == csv_dataset[text_columns[0]][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ text_columns[-1] ][0] == csv_dataset[text_columns[-1]][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset['label'][0] == csv_dataset[labels_column][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ text_columns[0] ][100] == csv_dataset[text_columns[0]][100]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ text_columns[-1] ][100] == csv_dataset[text_columns[-1]][100]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset['label'][100] == csv_dataset[labels_column][100]), "The Dataset should have the same contents as the DataFrame"
 
 def test_class_encode_decode(csv_dataset):
     text_column = "Final Narrative"
     labels_column = "NatureTitle"
 
-    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=True)
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, labels_column, test_size=0, encode_labels=True, dropna=False)
     dataset, label_names = ft.class_decode_column(dataset, "label", strip=False)
 
     original = list(csv_dataset[labels_column])
