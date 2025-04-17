@@ -178,6 +178,10 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
 
         # Get the first n samples from each class in the label.
         _, label_class_indices = np.unique(ds_subset[label], return_index=True)
+
+        # TODO: Refactor this
+        # Instead of getting the first n samples from each class,
+        # get a range from start - end for each class containing n samples
         label_class_indices = np.array([list(range(index, index + n)) for index in label_class_indices])
         label_class_indices = label_class_indices.flatten()
 
