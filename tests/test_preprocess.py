@@ -50,7 +50,7 @@ def test_class_encode_decode(csv_dataset):
 
 def test_combine_features(test_dataset):
     columns = ["title", "content"]
-    combined = ft.combine_columns(test_dataset, columns, combined_column_name = "text")
+    combined = ft.combine_columns(test_dataset, columns, new_column_name = "text")
 
     subset = test_dataset.select_columns(columns)
 

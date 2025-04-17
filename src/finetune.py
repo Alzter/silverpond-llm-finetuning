@@ -292,19 +292,19 @@ def class_decode_column(dataset : Dataset, labels_column : str, strip : bool = T
     
     return dataset, list(label_names)
 
-def _combine_columns_as_json(sample : dict, columns_to_combine : list[str], combined_column_name : str = "text") -> dict:
+def _combine_columns_as_json(sample : dict, columns_to_combine : list[str], new_column_name : str = "text") -> dict:
     """Given a row from a Dataset, combine many columns into a new column representing the columns as a JSON string.
 
     Args:
         sample (dict): The data sample.
         columns_to_combine (list[str]): List of column names to combine.
-        combined_column_name (str, optional): The name of the new combined column. Defaults to "text".
+        new_column_name (str, optional): The name of the new combined column. Defaults to "text".
 
     Returns:
         dict: The row with combined columns.
     """
     combined = {col: sample[col] for col in columns_to_combine}
-    return {combined_column_name: json.dumps(combined)}
+    return {new_column_name: json.dumps(combined)}
 
 def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_name = "text", delete_columns : bool = True) -> Dataset | DatasetDict:
     """Given a Dataset, combine many columns into one new column where each entry is a JSON string with the values of those columns.
@@ -332,7 +332,7 @@ def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_
 
     return dataset
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list = "text", labels_column : str = "label") -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list = "text", labels_column : str | list = "label") -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
