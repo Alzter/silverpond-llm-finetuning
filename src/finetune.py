@@ -158,10 +158,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
     
     ds_sorted = dataset
-    
-    for i in reversed(range(len(labels_column))):
-        label = labels_column[i]
-        ds_sorted = ds_sorted.flatten_indices().sort(label) # BUG: .sort() takes forever if called after .filter() unless you call .flatten_indices()
+    ds_sorted = ds_sorted.flatten_indices().sort(labels_column)
     
     n = max(n, 1) # You must select at least one sample
 
