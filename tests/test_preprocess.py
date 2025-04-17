@@ -53,6 +53,25 @@ def test_convert_csv_with_multiple_inputs(csv_dataset):
     assert(dataset[ text_columns[-1] ][100] == csv_dataset[text_columns[-1]][100]), "The Dataset should have the same contents as the DataFrame"
     assert(dataset['label'][100] == csv_dataset[labels_column][100]), "The Dataset should have the same contents as the DataFrame"
 
+def test_convert_csv_with_multiple_outputs(csv_dataset):
+
+    text_column = "Final Narrative"
+    label_columns = ["NatureTitle", "Part of Body Title"]
+
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, label_columns, test_size=0, encode_labels=False, dropna=False)
+
+    assert len(dataset["text"]) == len(csv_dataset[text_column]), "Datasets should have same size"
+    assert len(dataset[label_columns[0]]) == len(csv_dataset[label_columns[0]]), "Datasets should have same size"
+    assert len(dataset[label_columns[1]]) == len(csv_dataset[label_columns[1]]), "Datasets should have same size"
+
+    assert(dataset['text'][0] == csv_dataset[text_column][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ label_columns[0] ][0] == csv_dataset[label_columns[0] ][0]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ label_columns[-1] ][0] == csv_dataset[label_columns[-1] ][0]), "The Dataset should have the same contents as the DataFrame"
+    
+    assert(dataset['text'][100] == csv_dataset[text_column][100]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ label_columns[0] ][100] == csv_dataset[label_columns[0] ][100]), "The Dataset should have the same contents as the DataFrame"
+    assert(dataset[ label_columns[-1] ][100] == csv_dataset[label_columns[-1] ][100]), "The Dataset should have the same contents as the DataFrame"
+    
 def test_class_encode_decode(csv_dataset):
     text_column = "Final Narrative"
     labels_column = "NatureTitle"
@@ -64,6 +83,9 @@ def test_class_encode_decode(csv_dataset):
     new = list(dataset["label"])
 
     assert len(original) == len(new), "Encoding and then decoding a label column should return it to its original state"
+    
+    assert original[0] == new[0], "Encoding and then decoding a label column should return it to its original state"
+    assert original[-1] == new[-1], "Encoding and then decoding a label column should return it to its original state"
     #assert list(dataset['label']) == list(csv_dataset[labels_column]), "Encoding and then decoding a label column should return it to its original state"
 
 def test_combine_features(test_dataset):
