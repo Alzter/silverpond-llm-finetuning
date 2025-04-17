@@ -324,13 +324,13 @@ def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_
 
     return dataset
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "text", labels_column : str = "label") -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list = "text", labels_column : str = "label") -> tuple[Dataset, list]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
     Args:
         dataset (Dataset | DatasetDict): A supervised text-classification dataset.
-        text_column (str): The column name for the input text column (X).
+        text_column (str | list): The column name(s) for the input text column (X).
         labels_column (str, optional): The column name for the output label column (y). Defaults to "label".
     
     Returns:
@@ -348,11 +348,24 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str = "tex
             if len(new_labels) > len(label_names): label_names = new_labels
         return dataset, label_names
 
-    for column in [text_column, labels_column]:
+    # Convert text_column into a list if it is not already
+    if type(text_column) is str: text_column = [text_column]
+
+    for column in [*text_column, labels_column]:
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     # Select only the text and label columns.
-    dataset = dataset.select_columns([text_column,labels_column])
+    dataset = dataset.select_columns([*text_column,labels_column])
+    
+    # If there are multiple input text features, combine them into one using JSON formatting
+    if len(text_column) > 1:
+        dataset = combine_columns(dataset, text_column, new_column_name="text")
+        
+        # Convert text_column into a string pointing to the combined column
+        text_column = "text"
+    else:
+        # Convert text_column into a string pointing to the combined column
+        text_column = text_column[0]
 
     # Convert the dataset into prompt/completion format.
     dataset = dataset.rename_column(text_column, "prompt")

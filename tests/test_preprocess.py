@@ -145,6 +145,23 @@ def test_preprocess_dataset(test_dataset):
     assert samples == [message[0]['content'] for message in processed_dataset['messages']], "The content of the pre-processed dataset should be identical"
     assert labels == [message[-1]['content'] for message in processed_dataset['messages']], "The content of the pre-processed dataset should be identical"
 
+def test_preprocess_dataset_with_multiple_input_features(test_dataset):
+
+    columns = ["title", "content"]
+    processed_dataset, _ = ft.preprocess_dataset(test_dataset, columns, "label")
+
+    assert processed_dataset.column_names == ["messages"], "Dataset must be in conversational format"
+
+    sample = test_dataset.select_columns(columns)
+
+    expected = json.dumps( sample[0] )
+    actual = processed_dataset['messages'][0][0]['content']
+    assert expected == actual, "The input feature of the preprocessed dataset should be a JSON string representing the several input features that were selected"
+
+    expected = json.dumps( sample[-1] )
+    actual = processed_dataset['messages'][-1][0]['content']
+    assert expected == actual, "The input feature of the preprocessed dataset should be a JSON string representing the several input features that were selected"
+
 def test_preprocess_dataset_no_side_effects(test_dataset):
     expected = test_dataset.column_names
 
