@@ -137,14 +137,14 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
     return dataset
 
-def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, shuffle:bool=True, seed:int=0) -> Dataset:
+def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | list, shuffle:bool=True, seed:int=0) -> Dataset:
     """
     Given a dataset, obtain a smaller dataset containing the first **n** samples from each class.
 
     Args:
         dataset (Dataset): The dataset to sample.
-        labels_column (str): The column name for the labels in the dataset.
         n (int): How many samples from each class to extract.
+        labels_column (str | list): The column name(s) for the labels in the dataset.
         shuffle (bool): Whether to sort the final result by class or randomly.
         seed (int, optional): RNG seed. Defaults to 0.
 
@@ -152,28 +152,84 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
         Dataset: The sample of the dataset.
     """
 
-    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
+    if type(labels_column) is str: labels_column = [labels_column]
 
+    for column in [*labels_column]:
+        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
+    
+    ds_sorted = dataset
+    
+    for i in reversed(range(len(labels_column))):
+        label = labels_column[i]
+        ds_sorted = ds_sorted.flatten_indices().sort(label) # BUG: .sort() takes forever if called after .filter() unless you call .flatten_indices()
+    
+    n = max(n, 1) # You must select at least one sample
 
-    ds_sorted = dataset.flatten_indices().sort(labels_column) # BUG: .sort() takes forever if called after .filter() unless you call .flatten_indices()
+    class_indices = []
+    ds_subset = ds_sorted
 
-    _, class_indices = np.unique(ds_sorted[labels_column], return_index=True)
+    # For each label:
+    for label in labels_column:
+        
+        # Get the number of samples from the least common class.
+        num_samples_in_minority_class = pd.Series(ds_subset[label]).value_counts().min()
 
-    # Get the number of samples from the least common class.
-    num_samples_in_minority_class = pd.Series(ds_sorted[labels_column]).value_counts().min()
+        # Undersample if needed to ensure an equal number of samples per class.
+        if n > num_samples_in_minority_class:
+            warnings.warn(f"\nCannot sample {n} samples per class for label {label} equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
+            n = min(n, num_samples_in_minority_class)
 
-    # Ensure n is not greater than the number of samples per class.
-    samples_per_class = np.diff(class_indices).min()
-    n = min(n, samples_per_class)
-    n = max(n, 1)
+        # Get the first n samples from each class in the label.
+        _, label_class_indices = np.unique(ds_subset[label], return_index=True)
+        label_class_indices = np.array([list(range(index, index + n)) for index in label_class_indices])
+        label_class_indices = label_class_indices.flatten()
 
-    # Undersample if needed to ensure an equal number of samples per class.
-    if n > num_samples_in_minority_class:
-        warnings.warn(f"\nCannot sample {n} samples per class equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
-    n = min(n, num_samples_in_minority_class)
+        # Restrict the search space of future labels to
+        # only the samples we just selected.
+        ds_subset = ds_subset.select(label_class_indices)
 
-    class_indices = np.array([list(range(index, index + n)) for index in class_indices])
-    class_indices = class_indices.flatten()
+        # Append the class indices we just selected to a list.
+        class_indices.append(label_class_indices)
+    
+    # The list of class indices we just produced is hierarchical
+    # Each element points to the indices of each previous element
+    # To resolve this, we must flatten the nested list like so:
+
+    # Iterate over the list of class indices in reverse order
+    for i in reversed(range(len(class_indices))):
+        index = class_indices[i]
+
+        # For each index, get every index that comes before it
+        for j in reversed(range(i)):
+
+            # Update the index to use the elements of the previous index
+            next_index = class_indices[j]
+            index = [next_index[k] for k in index]
+
+        class_indices[i] = index
+
+    # Flatten the list of class indices
+    class_indices = [i for j in class_indices for i in j]
+    # Remove all duplicate indices
+    class_indices = np.unique(class_indices).tolist()
+
+    # for label in labels_column:
+    #     # Get the number of samples from the least common class.
+    #     num_samples_in_minority_class = pd.Series(ds_sorted[label]).value_counts().min()
+
+    #     # Undersample if needed to ensure an equal number of samples per class.
+    #     if n > num_samples_in_minority_class:
+    #         warnings.warn(f"\nCannot sample {n} samples per class equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
+    #         n = min(n, num_samples_in_minority_class)
+
+    # # Obtain the indices for the first n items for each class
+    # class_indices = []
+    # for label in labels_column:
+    #     _, label_class_indices = np.unique(ds_sorted[label], return_index=True)
+    #     label_class_indices = np.array([list(range(index, index + n)) for index in label_class_indices])
+    #     label_class_indices = label_class_indices.flatten()
+
+    #     class_indices.extend(label_class_indices)
 
     sample = ds_sorted.select(class_indices)
 
@@ -181,7 +237,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str, sh
     
     return sample
 
-def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str | list = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -192,7 +248,7 @@ def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "
 
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
-        labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
+        labels_column (str : list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
         samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
@@ -213,18 +269,26 @@ def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str = "
 
     if shuffle: dataset=dataset.shuffle(seed=seed)
     
-    if labels_column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {labels_column}")
+    if type(labels_column) is str: labels_column = [labels_column]
+
+    for column in [*labels_column]:
+        if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     if ratio is None and size is None and samples_per_class is None:
         raise ValueError("Either ratio, size, or samples_per_class must be given.")
 
+    # If samples_per_class is not given, we have to calculate
+    # how many samples to allocate to each class based on
+    # the size or ratio
     if samples_per_class is None:
         if size is not None:
             ratio = size / dataset.num_rows
         ratio = max(ratio, 0)
         ratio = min(ratio, 1)
 
-        num_labels = np.unique(dataset[labels_column]).size
+        num_labels = 0
+        for label in labels_column:
+            num_labels += np.unique(dataset[label]).size
         
         samples_per_class = dataset.num_rows / num_labels * ratio
         samples_per_class = int(math.floor(samples_per_class))
