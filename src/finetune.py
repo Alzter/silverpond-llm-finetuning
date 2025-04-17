@@ -66,7 +66,7 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labe
 
     return ds
 
-def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_column : str = "label", main_subset : str = 'train', top_n_labels : list | None = None) -> Dataset:
+def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_column : str | list = "label", main_subset : str = 'train', top_n_labels : dict | None = None) -> Dataset:
     """
     Given a dataset, limit the total number of classes to the top ``n`` most common.
     All samples not within the top ``n`` classes are removed.
@@ -76,15 +76,18 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
         n (int, optional): Top ``n`` most common classes to select from the dataset. Defaults to 10.
-        labels_column (str, optional): The column name for the labels in the dataset. Defaults to "label".
+        labels_column (str | list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
         main_subset (str, optional): If a ``DatasetDict`` is passed to this function (e.g., a dataset split into train/test subsets),
                                         this argument specifies *which* subset to use to get the top ``n`` classes.
                                         Defaults to 'train'.
-        top_n_labels (list | None, optional): Optional arbitrary list of class labels to use. If provided, selects these class labels instead of the top ``n`` classes. Defaults to None.
+        top_n_labels (dict | None, optional): Optional arbitrary list of class labels to use. If provided, selects these class labels instead of the top ``n`` classes. Defaults to None.
 
     Returns:
         Dataset: The dataset with only samples from the top ``n`` classes.
     """
+
+    if type(labels_column) is str: labels_column = [labels_column]
+
     if top_n_labels is None:
         # Select the top n class labels from the main dataset
         if type(dataset) is DatasetDict:
@@ -93,12 +96,18 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
             main_dataset = dataset[main_subset]
         else: main_dataset = dataset
         
-        labels = pd.Series(main_dataset[labels_column])
-        n = max(n, 1)
-        n = min(n, labels.size)
+        n = max(n, 1) # Ensure n >= 1
+        # Ensure n is <= maximum number of class labels
+        for label in labels_column:
+            labels = pd.Series(main_dataset[label])
+            n = min(n, labels.unique().size)
         
         # Get the top n labels from the dataset as a list
-        top_n_labels = labels.value_counts().iloc[0:n].keys().to_list()
+        
+        top_n_labels = {}
+        for label in labels_column:
+            labels = pd.Series(main_dataset[label])
+            top_n_labels[label] = labels.value_counts().iloc[0:n].keys().to_list()
     
     # If the dataset is actually a container of datasets,
     # use recursion to sample all sub-datasets
@@ -109,16 +118,17 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
         return dataset
     
-    dataset = dataset.filter(lambda x : x[labels_column] in top_n_labels)
+    for label in labels_column:
+        dataset = dataset.filter(lambda x : x[label] in top_n_labels[label])
 
-    # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
-    if type(dataset.features[labels_column]) is ClassLabel:
-        
-        # Convert class label column into raw strings
-        dataset, label_names = class_decode_column(dataset, labels_column)
-        
-        # Cast class label column back into a ClassLabel.
-        dataset = dataset.class_encode_column(labels_column)
+        # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
+        if type(dataset.features[label]) is ClassLabel:
+            
+            # Convert class label column into raw strings
+            dataset, _ = class_decode_column(dataset, label)
+            
+            # Cast class label column back into a ClassLabel.
+            dataset = dataset.class_encode_column(label)
 
     #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
     return dataset
@@ -535,8 +545,3 @@ def generate(
     # Decode the tokens back into text
     output = tokenizer.batch_decode(generation_output, skip_special_tokens=skip_special_tokens)[0]
     return output
-
-
-
-    
-

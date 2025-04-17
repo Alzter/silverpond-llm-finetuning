@@ -222,7 +222,7 @@ def test_get_class_labels(test_dataset):
 
     assert expected == actual, "A list of class label names should be returned when preprocessing a dataset."
 
-def test_get_top_n_classes(csv_dataset):
+def test_get_top_10_classes(csv_dataset):
     text_column = "Final Narrative"
     labels_column = "NatureTitle"
 
@@ -243,4 +243,30 @@ def test_get_top_n_classes(csv_dataset):
     top_classes.sort()
 
     assert len(labels) == 10, "Getting the top 10 classes should return only 10 classes"
-    assert labels == top_classes, "The top 10 classes should be the 10 most common clsases"
+    assert labels == top_classes, "The top 10 classes should be the 10 most common clases"
+
+def test_get_top_10_classes_from_multiple_labels(csv_dataset):
+    text_column = "Final Narrative"
+    label_columns = ["NatureTitle", "Part of Body Title"]
+
+    top_classes_list = {}
+    for label in label_columns:
+        # Get the top 10 classes from the CSV dataset
+        new_data = csv_dataset.copy()
+        new_data = new_data.dropna(subset=label)
+        new_data[label] = new_data[label].map(lambda x : x.strip())
+        top_classes_list[label] = new_data[label].value_counts()[0:10].keys().tolist()
+
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, text_column, label_columns, test_size=0)
+    
+    dataset = ft.select_top_n_classes(dataset, n=10, labels_column=label_columns)
+
+    for label in label_columns:
+        labels = dataset.features[label].names
+        top_classes = top_classes_list[label]
+
+        top_classes.sort()
+        labels.sort()
+
+        assert len(labels) == 10, "Getting the top 10 classes should return only 10 classes"
+        assert labels == top_classes, "The top 10 classes should be the 10 most common clases"
