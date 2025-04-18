@@ -176,14 +176,30 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
             warnings.warn(f"\nCannot sample {n} samples per class for label {label} equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
             n = min(n, num_samples_in_minority_class)
 
-        # Get the first n samples from each class in the label.
-        _, label_class_indices = np.unique(ds_subset[label], return_index=True)
+        # Get the index of the first occurence of every unique class in the label
+        _, first_class_indices = np.unique(ds_subset[label], return_index=True)
 
-        # TODO: Refactor this
-        # Instead of getting the first n samples from each class,
-        # get a range from start - end for each class containing n samples
-        label_class_indices = np.array([list(range(index, index + n)) for index in label_class_indices])
-        label_class_indices = label_class_indices.flatten()
+        # For each class, obtain n evenly spaced samples
+        label_class_indices = []
+
+        for i, index_start in enumerate(first_class_indices):
+            
+            # The last sample of each class is the first sample of the next class - 1.
+            if i < len(first_class_indices) - 1:
+                index_end = first_class_indices[i + 1] - 1
+            # The last sample of the last class is the last item in the dataset.
+            else:
+                index_end = len(ds_subset[label]) - 1
+
+            label_class_indices.extend(
+                
+                # Obtain n samples evenly distributed
+                # from the first sample of the class to
+                # the last sample of the class.
+                np.linspace( index_start, index_end,
+                    n, endpoint=True, dtype='int'
+                ).tolist()
+            )
 
         # Restrict the search space of future labels to
         # only the samples we just selected.
@@ -200,7 +216,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
     for i in reversed(range(len(class_indices))):
         index = class_indices[i]
 
-        # For each index, get every index that comes before it
+        # For each index, iterate through every previous index
         for j in reversed(range(i)):
 
             # Update the index to use the elements of the previous index
@@ -213,24 +229,6 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
     class_indices = [i for j in class_indices for i in j]
     # Remove all duplicate indices
     class_indices = np.unique(class_indices).tolist()
-
-    # for label in labels_column:
-    #     # Get the number of samples from the least common class.
-    #     num_samples_in_minority_class = pd.Series(ds_sorted[label]).value_counts().min()
-
-    #     # Undersample if needed to ensure an equal number of samples per class.
-    #     if n > num_samples_in_minority_class:
-    #         warnings.warn(f"\nCannot sample {n} samples per class equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
-    #         n = min(n, num_samples_in_minority_class)
-
-    # # Obtain the indices for the first n items for each class
-    # class_indices = []
-    # for label in labels_column:
-    #     _, label_class_indices = np.unique(ds_sorted[label], return_index=True)
-    #     label_class_indices = np.array([list(range(index, index + n)) for index in label_class_indices])
-    #     label_class_indices = label_class_indices.flatten()
-
-    #     class_indices.extend(label_class_indices)
 
     sample = ds_sorted.select(class_indices)
 
