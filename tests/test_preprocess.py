@@ -270,3 +270,13 @@ def test_get_top_10_classes_from_multiple_labels(csv_dataset):
 
         assert len(labels) == 10, "Getting the top 10 classes should return only 10 classes"
         assert labels == top_classes, "The top 10 classes should be the 10 most common clases"
+
+def test_undersample_multiclass(csv_dataset):
+    input_features = ["Final Narrative", "EventTitle"]
+    output_labels = ["NatureTitle", "Part of Body Title"]
+    # Convert DataFrame into a Dataset
+    dataset = ft.create_dataset_from_dataframe(csv_dataset, input_features, output_labels)
+    # Select items from the 10 most common classes
+    dataset = ft.select_top_n_classes(dataset, n=10, labels_column=output_labels)
+    # Sample an equal number of items from each class
+    ft.undersample_dataset(dataset, ratio=1,labels_column=output_labels)
