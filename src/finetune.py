@@ -341,35 +341,40 @@ def _sample_label_to_string(sample : dict, class_label_names : list, label_colum
     sample[label_column] = class_label_names[ int(sample[label_column]) ]
     return sample
 
-def class_decode_column(dataset : Dataset, labels_column : str, strip : bool = True) -> tuple[Dataset, list[str]]:
+def class_decode_column(dataset : Dataset, labels_column : str | list, strip : bool = True) -> tuple[Dataset, dict[str, list[str]]]:
     """Given a Dataset, cast a given column from a ClassLabel to a Value with string data type.
 
     Args:
         dataset (Dataset): The dataset.
-        labels_column (str): Which column to convert from ClassLabel to string.
+        labels_column (str): Which column(s) to convert from ClassLabel to string.
         strip (bool, optional): Whether to strip the list of all label names to remove duplicates. Defaults to True.
 
     Returns:
         dataset (Dataset): The dataset with labels_column converted from ClassLabel to string.
-        label_names (list[str]): List of all unique label names from the ClassLabel.
+        label_names (dict[str, list[str]]): List of all unique class names for each label.
+                                            E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
     """
     
-    # Map the class label column from integer to string.
-    if type(dataset.features[labels_column]) is ClassLabel:
-        label_names = dataset.features[labels_column].names
-        if strip: label_names = [n.strip() for n in label_names]
+    label_names = {}
+    for label in labels_column:
+        # Map the class label column from integer to string.
+        if type(dataset.features[label]) is ClassLabel:
+            class_names = dataset.features[label].names
+            if strip: class_names = [n.strip() for n in class_names]
 
-        # Cast label column from int to str.
-        dataset = dataset.cast_column(labels_column, Value(dtype='string'))
+            # Cast label column from int to str.
+            dataset = dataset.cast_column(label, Value(dtype='string'))
 
-        # Replace all class label IDs with label names.
-        dataset = dataset.map( lambda sample : _sample_label_to_string(sample, label_names, label_column=labels_column) )
-    else:
-        label_names = dataset[labels_column]
-        if strip: label_names = [n.strip() for n in label_names]
-        label_names = list(np.unique(label_names))
+            # Replace all class label IDs with label names.
+            dataset = dataset.map( lambda sample : _sample_label_to_string(sample, class_names, label_column=label) )
+        else:
+            class_names = dataset[label]
+            if strip: class_names = [n.strip() for n in class_names]
+            class_names = list(np.unique(class_names))
+        
+        label_names[label] = list(class_names)
     
-    return dataset, list(label_names)
+    return dataset, label_names
 
 def _combine_columns_as_json(sample : dict, columns_to_combine : list[str], new_column_name : str = "text") -> dict:
     """Given a row from a Dataset, combine many columns into a new column representing the columns as a JSON string.
@@ -455,6 +460,9 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
         # Convert text_column into a string pointing to the combined column
         text_column = text_column[0]
 
+    # Map the class label column(s) from integer to string.
+    dataset, label_names = class_decode_column(dataset, labels_column)
+
     # If there are multiple labels, combine them into one using JSON formatting
     if len(labels_column) > 1:
         dataset = combine_columns(dataset, labels_column, new_column_name="label")
@@ -465,9 +473,6 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
     # Convert the dataset into prompt/completion format.
     dataset = dataset.rename_column(text_column, "prompt")
     dataset = dataset.rename_column(labels_column, "completion")
-
-    # Map the class label column from integer to string.
-    dataset, label_names = class_decode_column(dataset, "completion")
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
