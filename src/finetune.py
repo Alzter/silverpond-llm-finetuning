@@ -175,6 +175,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
         if n > num_samples_in_minority_class:
             warnings.warn(f"\nCannot sample {n} samples per class for label {label} equally because some classes have fewer samples.\nSampling {num_samples_in_minority_class} samples per class instead.\n")
             n = min(n, num_samples_in_minority_class)
+            n = max(n, 1)
 
         # Get the index of the first occurence of every unique class in the label
         _, first_class_indices = np.unique(ds_subset[label], return_index=True)
