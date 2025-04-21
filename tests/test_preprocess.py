@@ -111,6 +111,7 @@ def test_decode_classlabel(test_dataset):
     old_values = test_dataset["label"]
 
     test_dataset, label_names = ft.class_decode_column(test_dataset, "label")
+    label_names = label_names['label']
 
     assert type(test_dataset.features["label"]) is Value, "After class decoding, the class label should be a Value with dtype string"
     assert test_dataset.features['label'].dtype == 'string', "After class decoding, the class label should be a Value with dtype string"
