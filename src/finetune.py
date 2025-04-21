@@ -192,6 +192,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
             else:
                 index_end = len(ds_subset[label]) - 1
 
+            if index_end < index_start: continue
             label_class_indices.extend(
                 
                 # Obtain n samples evenly distributed
