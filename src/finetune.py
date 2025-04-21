@@ -355,6 +355,8 @@ def class_decode_column(dataset : Dataset, labels_column : str | list, strip : b
                                             E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
     """
     
+    if type(labels_column) is str: labels_column = [labels_column]
+    
     label_names = {}
     for label in labels_column:
         # Map the class label column from integer to string.
