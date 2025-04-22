@@ -108,7 +108,7 @@ class EvaluationResult:
 
         y_pred, y_true = {}, {}
 
-        for label, class_names in self.label_names:
+        for label, class_names in self.label_names.items():
             # Cast labels from int (class ID) -> str (class name)
             y_pred[label] = np.array([class_names[id] for id in self.labels_pred[label]])
             y_true[label] = np.array([class_names[id] for id in self.labels_true[label]])
@@ -128,8 +128,10 @@ class EvaluationResult:
         answers = pd.DataFrame(answers)
 
         if incorrect_only:
+            incorrect = False
             for label in self.label_names.keys():
-                answers = answers.loc[answers[f"Predicted {label}"] != answers[f"True {label}"]]
+                incorrect |= answers[f"Predicted {label}"] != answers[f"True {label}"]
+            answers = answers[incorrect]
 
         return answers
     
