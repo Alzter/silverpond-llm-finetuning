@@ -151,7 +151,7 @@ class EvaluationResult:
             output_dir (str): Which directory to store the confusion matrix.
         """
 
-        y_true, y_pred, label_names = self.labels_pred[label_name], self.y_pred[label_name], self.label_names[label_name]
+        y_true, y_pred, label_names = self.labels_true[label_name], self.labels_pred[label_name], self.label_names[label_name]
 
         cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
 
