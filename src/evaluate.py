@@ -12,7 +12,7 @@ import numpy as np
 import time, json
 from datetime import timedelta
 
-def _sanitise_string(string) -> str:
+def _sanitize_string(string) -> str:
     """Make a given string safe for use within a file path.
     Args:
         string (str): A string.
@@ -142,43 +142,46 @@ class EvaluationResult:
         """
         return timedelta(seconds=self.total_time_elapsed)
     
-    def save_confusion_matrix(self, label_name : str, output_dir : str) -> None:
-        """
-        Generate and save a confusion matrix showing the prediction accuracy of the model for a given class label.
+    def get_confusion_matrix(self, label_name : str, normalize : bool = True) -> np.ndarray:
+        y_true, y_pred = self.labels_true[label_name], self.labels_pred[label_name]
+
+        normalize = 'true' if normalize else None
+        return confusion_matrix(y_true=y_true,y_pred=y_pred,normalize=normalize)
+        
+    def plot_confusion_matrix(self, label_name : str, char_limit:int = 15, max_classes:int = 15) -> ConfusionMatrixDisplay:
+        """Generate a confusion matrix showing the prediction accuracy of the model for a given class label.
 
         Args:
-            label_name (str): The name of the class label to use for the confusion matrix.
-            output_dir (str): Which directory to store the confusion matrix.
+            label_name (str): What label to plot the confusion matrix for.
+            char_limit (int, optional): Truncate tick labels to this many characters. Defaults to 15.
+            max_labels (int, optional): If there are more classes than this, hide all text in the graph altogether. Defaults to 15.
+
+        Returns:
+            ConfusionMatrixDisplay: The confusion matrix
         """
-
         y_true, y_pred, label_names = self.labels_true[label_name], self.labels_pred[label_name], self.label_names[label_name]
+        y_true = [label_names[i] for i in y_true]
+        y_pred = [label_names[i] for i in y_pred]
 
-        cm = confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true')
+        include_values = len(label_names) <= max_classes
 
-        # If we have more than 15 labels, hide label text
-        hide_text = len(label_names) > 15
-        
-        try:
-            disp = ConfusionMatrixDisplay(cm, display_labels=label_names)
-        except Exception:
-            disp = ConfusionMatrixDisplay(cm)
-        
-        disp.plot(
-            cmap = plt.cm.Blues,
-            xticks_rotation = "vertical",
-            text_kw = {'fontsize': 6},
-            values_format = '.0%',
-            include_values = (not hide_text)
-        )
+        label_names_truncated = [f"{i[0:char_limit]}{"..." if len(i) > char_limit else ""}" for i in label_names]
 
-        disp.ax_.set_title( self.config.name )
+        disp = ConfusionMatrixDisplay.from_predictions(
+            y_true=y_true,y_pred=y_pred,labels=label_names,
+            include_values=include_values, cmap=plt.cm.Blues,
+            xticks_rotation='vertical',
+            normalize="true",
+            display_labels=label_names_truncated
+            )
+            
+        disp.ax_.set_title( f"{label_name} ({self.config.name})" )
 
-        if hide_text:
+        if not include_values:
             disp.ax_.set_xticks([])
             disp.ax_.set_yticks([])
-        
-        label_name_sanitized = _sanitise_string(label_name)
-        plt.savefig( os.path.join(output_dir, f"confusion_matrix_{label_name_sanitized}.png"), dpi=200, bbox_inches='tight' )
+
+        return disp
 
     def save(self, output_dir : str = "results") -> None:
         """
@@ -203,7 +206,7 @@ class EvaluationResult:
         """
         
         # Make result name file safe
-        result_path_name = _sanitise_string(self.config.name)
+        result_path_name = _sanitize_string(self.config.name)
 
         if not output_dir:
             output_dir = result_path_name
@@ -218,18 +221,20 @@ class EvaluationResult:
         # For each label:
         for label, class_names in self.label_names.items():
             
+            label_name_sanitized = _sanitize_string(label)
+
             y_pred, y_true = self.labels_pred[label], self.labels_true[label]
 
             # Calculate accuracy, precision, recall, and F1 score
             classif_report = classification_report(y_true, y_pred, zero_division=0.0, output_dict=True)
             classif_report = pd.DataFrame(classif_report).transpose()
 
-            label_name_sanitised = _sanitise_string(label)
-            classif_report.to_csv( os.path.join(output_dir, f"evaluation_{label_name_sanitised}.csv") )
+            classif_report.to_csv( os.path.join(output_dir, f"evaluation_{label_name_sanitized}.csv") )
 
             # Save the confusion matrix
-            self.save_confusion_matrix( label_name=label, output_dir=output_dir )
-        
+            self.plot_confusion_matrix(label_name=label)
+            plt.savefig( os.path.join(output_dir, f"confusion_matrix_{label_name_sanitized}.png"), dpi=200, bbox_inches='tight' )
+            
         answers = self.get_answers(incorrect_only=False)
         incorrect_answers = self.get_answers(incorrect_only=True)
 
