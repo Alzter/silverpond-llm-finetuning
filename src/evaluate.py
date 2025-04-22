@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass, asdict
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -45,6 +46,11 @@ class EvaluationConfig:
     max_tokens : int
     prompt : str | None = None
     # extractor_method : func
+    
+    @classmethod
+    def from_dict(cls, data_dict: dict):
+        field_names = set(f.name for f in dataclasses.fields(cls))
+        return cls(**{k: v for k, v in data_dict.items() if k in field_names})
         
 @dataclass
 class EvaluationResult:
@@ -69,6 +75,11 @@ class EvaluationResult:
     llm_responses : list[str]
     prediction_times : list[float]
     total_time_elapsed : float
+
+    @classmethod
+    def from_dict(cls, data_dict: dict):
+        field_names = set(f.name for f in dataclasses.fields(cls))
+        return cls(**{k: v for k, v in data_dict.items() if k in field_names})
 
     def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
         """
