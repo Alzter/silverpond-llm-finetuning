@@ -5,6 +5,7 @@ import model_prompts
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from datasets import load_dataset
 import torch
+import pandas as pd
 
 @pytest.fixture
 def llm():
@@ -23,9 +24,14 @@ def llm():
 @pytest.fixture
 def eval_dataset():
     eval_data = load_dataset("fancyzhx/dbpedia_14", split="test")
-    eval_data = ft.undersample_dataset(eval_data, labels_column="label", samples_per_class=2)
-    eval_data, label_names = ft.preprocess_dataset(eval_data, text_column="content", labels_column="label")
+    eval_data = ft.undersample_dataset(eval_data, label_columns="label", samples_per_class=2)
+    eval_data, label_names = ft.preprocess_dataset(eval_data, text_columns="content", label_columns="label")
     return (eval_data, label_names)
+
+@pytest.fixture()
+def csv_dataset():
+    return pd.read_csv("tests/test_data.csv", low_memory=False)
+    
 
 def test_evaluate_llm(llm, eval_dataset):
     model, tokenizer = llm
