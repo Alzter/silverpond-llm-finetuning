@@ -357,7 +357,7 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     print(response_dict)
 
     # For each class label
-    class_ids = []
+    class_ids = {}
     for label, class_names in label_names.items():
 
         label = label.lower().strip()
