@@ -353,6 +353,8 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
         return class_ids
         #raise ValueError(f"Could not parse JSON data from model_response: {model_response}")
     
+    print(response_dict)
+
     # For each class label
     class_ids = []
     for label, class_names in label_names.items():
