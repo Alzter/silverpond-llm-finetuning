@@ -51,6 +51,12 @@ class EvaluationConfig:
     def from_dict(cls, data_dict: dict):
         field_names = set(f.name for f in dataclasses.fields(cls))
         return cls(**{k: v for k, v in data_dict.items() if k in field_names})
+
+    def to_dict(self): return asdict(self)
+    def save_json(self, path : str):
+        data = self.to_dict()
+        with open( path, "w", encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
         
 @dataclass
 class EvaluationResult:
@@ -60,18 +66,18 @@ class EvaluationResult:
     Args:
         config (EvaluationConfig): The instructions given to the LLM to classify each sample.
         texts (list[str]): Every text sample in the evaluation dataset. (X_test)
-        labels_pred (list[dict]): Predicted class IDs (int) for each sample. (y_pred)
-        labels_true (list[dict]): True class IDs (int) for each sample. (y_true)
-        label_names (list[dict]): List of all class names for each label.
+        labels_pred (dict[str, list]): List of predicted class IDs (int) for each sample for each label. (y_pred)
+        labels_true (dict[str, list]): List of true class IDs (int) for each sample for each label. (y_true)
+        label_names (dict[str, list]): List of all class names for each label.
         llm_responses (list[str]): Raw LLM response to each sample.
         prediction_times (list[float]): How long it took the LLM to classify each sample in seconds.
         total_time_elapsed (float): How long the evaluation took to run overall in seconds.
     """
     config : EvaluationConfig
     texts : list[str]
-    labels_pred : list[dict]
-    labels_true : list[dict]
-    label_names : list[dict]
+    labels_pred : dict[str, list]
+    labels_true : dict[str, list]
+    label_names : dict[str, list]
     llm_responses : list[str]
     prediction_times : list[float]
     total_time_elapsed : float
@@ -79,7 +85,15 @@ class EvaluationResult:
     @classmethod
     def from_dict(cls, data_dict: dict):
         field_names = set(f.name for f in dataclasses.fields(cls))
-        return cls(**{k: v for k, v in data_dict.items() if k in field_names})
+        result = cls(**{k: v for k, v in data_dict.items() if k in field_names})
+        result.config = EvaluationConfig.from_dict(result.config)
+        return result
+    
+    def to_dict(self): return asdict(self)
+    def save_json(self, path : str):
+        data = self.to_dict()
+        with open( path, "w", encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
     def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
         """
@@ -96,8 +110,8 @@ class EvaluationResult:
 
         for label, class_names in self.label_names:
             # Cast labels from int (class ID) -> str (class name)
-            y_pred[label] = np.array([class_names[id] for id in self.labels_pred])
-            y_true[label] = np.array([class_names[id] for id in self.labels_true])
+            y_pred[label] = np.array([class_names[id] for id in self.labels_pred[label]])
+            y_true[label] = np.array([class_names[id] for id in self.labels_true[label]])
         
         answers = {
         "Text" : np.array(self.texts),
@@ -199,9 +213,7 @@ class EvaluationResult:
         os.makedirs(output_dir, exist_ok=True)
 
         # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
-        data = asdict(self)
-        with open( os.path.join(output_dir, "raw_output.json"), "w", encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        self.save_json( os.path.join(output_dir, "raw_output.json") )
 
         # For each label:
         for label, class_names in self.label_names.items():
@@ -452,6 +464,10 @@ def evaluate(
     # Get all class IDs from the label(s) in eval_dataset (y_true)
     groundtruth = [message[-1]['content'] for message in eval_dataset['messages']]
     labels_true = [_get_class_ids_from_model_response(label, label_names) for label in groundtruth]
+
+    # Restructure labels from list of dicts to dict of lists
+    labels_true = pd.DataFrame(labels_true).to_dict(orient='list')
+    labels_pred = pd.DataFrame(labels_pred).to_dict(orient='list')
 
     return EvaluationResult(
         config=eval_config,
