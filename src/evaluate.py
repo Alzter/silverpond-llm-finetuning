@@ -345,6 +345,7 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
         response_dict = json.loads(model_response)
     except Exception:
         
+        print(f"Could not extract JSON from response: {model_response}")
         # If the model's response is not valid JSON, simply return each label as unknown
         class_ids = {}
         for label, class_names in label_names.items():
@@ -363,10 +364,11 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
 
         # See if the model predicted a value for it
         try:
-            pred_label_string = response_dict[label]
+            pred_label_string = str(response_dict[label])
         # If not, return "unknown" for the class label
         except Exception:
-            pred_label_string = len(class_names) - 1
+            class_ids[label] = len(class_names) - 1
+            continue
         
         # Extract the Class ID from the model's predicted label name
         class_id = _get_class_id_from_model_response(pred_label_string, class_names)
