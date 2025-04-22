@@ -13,14 +13,14 @@ import json
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
-def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labels_column : str | list, test_size : float | None = 0.1, encode_labels : bool = True, dropna : bool = True) -> Dataset:
+def create_dataset_from_dataframe(df : DataFrame, text_columns : str | list, label_columns : str | list, test_size : float | None = 0.1, encode_labels : bool = True, dropna : bool = True) -> Dataset:
     """
     Convert a DataFrame into a Dataset for pre-processing.
 
     Args:
         df (DataFrame): The DataFrame to convert.
-        text_column (str | list): The column name(s) for the input text column (X).
-        labels_column (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
+        text_columns (str | list): The column name(s) for the input text column (X).
+        label_columns (str | list): The column name(s) for the output label column (y). Labels *must* be strings, not class IDs.
         test_size (float, optional): If specified, splits the dataset into train and test subsets where test_size is the ratio of the test subset. Defaults to 0.1.
         encode_labels (bool, optional): If true, converts all class label columns in the Dataset to ClassLabel data type. Defaults to True.
         dropna (bool, optional): If true, removes all rows which contain any null values. Defaults to True.
@@ -30,35 +30,28 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labe
     """
     df = df.copy() # Copy the dataframe to prevent the original being modified
 
-    # If we only have one label, rename the labels column to 'label'
-    if type(labels_column) is str:
-        df = df.rename(columns={labels_column : "label"})
-        labels_column = ["label"]
-
-    # If we only have one input feature, rename the inputs column to 'text'
-    if type(text_column) is str:
-        df = df.rename(columns={text_column : "text"})
-        text_column = ["text"]
+    if type(label_columns) is str: label_columns = [label_columns]
+    if type(text_columns) is str: text_columns = [text_columns]
 
     # Remove all leading/trailing whitespace within the class labels.
-    for label in labels_column:
+    for label in label_columns:
         df[label] = df[label].map(lambda x : x.strip() if type(x) is str else x)
 
     # Delete any empty values.
-    if dropna: df = df.dropna(subset=[*text_column, *labels_column])
+    if dropna: df = df.dropna(subset=[*text_columns, *label_columns])
     
     data = {}
 
-    for feature in text_column:
+    for feature in text_columns:
         data[feature] = df[feature].to_list()
 
-    for label in labels_column:
+    for label in label_columns:
         data[label] = df[label].to_list()
 
     ds = Dataset.from_dict(data)
 
     if encode_labels:
-        for label in labels_column:
+        for label in label_columns:
             ds = ds.class_encode_column(label) # Convert labels from Value to ClassLabel
 
     if test_size: # If test_size is not None and is > 0
@@ -66,7 +59,7 @@ def create_dataset_from_dataframe(df : DataFrame, text_column : str | list, labe
 
     return ds
 
-def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_column : str | list = "label", main_subset : str = 'train', top_n_labels : dict | None = None) -> Dataset:
+def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, label_columns : str | list = "label", main_subset : str = 'train', top_n_labels : dict | None = None) -> Dataset:
     """
     Given a dataset, limit the total number of classes to the top ``n`` most common.
     All samples not within the top ``n`` classes are removed.
@@ -76,7 +69,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
         n (int, optional): Top ``n`` most common classes to select from the dataset. Defaults to 10.
-        labels_column (str | list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
+        label_columns (str | list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
         main_subset (str, optional): If a ``DatasetDict`` is passed to this function (e.g., a dataset split into train/test subsets),
                                         this argument specifies *which* subset to use to get the top ``n`` classes.
                                         Defaults to 'train'.
@@ -86,7 +79,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         Dataset: The dataset with only samples from the top ``n`` classes.
     """
 
-    if type(labels_column) is str: labels_column = [labels_column]
+    if type(label_columns) is str: label_columns = [label_columns]
 
     if top_n_labels is None:
         # Select the top n class labels from the main dataset
@@ -98,7 +91,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         
         n = max(n, 1) # Ensure n >= 1
         # Ensure n is <= maximum number of class labels
-        for label in labels_column:
+        for label in label_columns:
             labels = pd.Series(main_dataset[label])
 
             num_labels = labels.unique().size
@@ -109,7 +102,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
         # Get the top n labels from the dataset as a list
         
         top_n_labels = {}
-        for label in labels_column:
+        for label in label_columns:
             labels = pd.Series(main_dataset[label])
             top_n_labels[label] = labels.value_counts().iloc[0:n].keys().to_list()
     
@@ -118,11 +111,11 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     if type(dataset) is DatasetDict:
         dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
-            dataset[subset] = select_top_n_classes(dataset[subset], labels_column=labels_column, n=n, top_n_labels = top_n_labels)
+            dataset[subset] = select_top_n_classes(dataset[subset], label_columns=label_columns, n=n, top_n_labels = top_n_labels)
         #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
         return dataset
     
-    for label in labels_column:
+    for label in label_columns:
         dataset = dataset.filter(lambda x : x[label] in top_n_labels[label])
 
         # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
@@ -137,14 +130,14 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, labels_c
     #dataset = dataset.flatten_indices() # Call .flatten_indices() after .filter() otherwise .sort() takes ages.
     return dataset
 
-def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | list, shuffle:bool=True, seed:int=0) -> Dataset:
+def _get_n_samples_per_class(dataset : Dataset, n : int, label_columns : str | list, shuffle:bool=True, seed:int=0) -> Dataset:
     """
     Given a dataset, obtain a smaller dataset containing the first **n** samples from each class.
 
     Args:
         dataset (Dataset): The dataset to sample.
         n (int): How many samples from each class to extract.
-        labels_column (str | list): The column name(s) for the labels in the dataset.
+        label_columns (str | list): The column name(s) for the labels in the dataset.
         shuffle (bool): Whether to sort the final result by class or randomly.
         seed (int, optional): RNG seed. Defaults to 0.
 
@@ -152,13 +145,13 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
         Dataset: The sample of the dataset.
     """
 
-    if type(labels_column) is str: labels_column = [labels_column]
+    if type(label_columns) is str: label_columns = [label_columns]
 
-    for column in [*labels_column]:
+    for column in [*label_columns]:
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
     
     ds_sorted = dataset
-    ds_sorted = ds_sorted.flatten_indices().sort(labels_column)
+    ds_sorted = ds_sorted.flatten_indices().sort(label_columns)
     
     n = max(n, 1) # You must select at least one sample
 
@@ -166,7 +159,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
     ds_subset = ds_sorted
 
     # For each label:
-    for label in labels_column:
+    for label in label_columns:
         
         # Get the number of samples from the least common class.
         num_samples_in_minority_class = pd.Series(ds_subset[label]).value_counts().min()
@@ -238,7 +231,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, labels_column : str | l
     
     return sample
 
-def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str | list = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
+def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | list = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -249,7 +242,7 @@ def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str | l
 
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
-        labels_column (str : list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
+        label_columns (str : list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
         ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
         size (int, optional): Number of items the new dataset should have. Defaults to None.
         samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
@@ -265,14 +258,14 @@ def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str | l
     if type(dataset) is DatasetDict:
         dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
-            dataset[subset] = undersample_dataset(dataset[subset], labels_column, ratio, size, samples_per_class, shuffle, seed)
+            dataset[subset] = undersample_dataset(dataset[subset], label_columns, ratio, size, samples_per_class, shuffle, seed)
         return dataset
 
     if shuffle: dataset=dataset.shuffle(seed=seed)
     
-    if type(labels_column) is str: labels_column = [labels_column]
+    if type(label_columns) is str: label_columns = [label_columns]
 
-    for column in [*labels_column]:
+    for column in [*label_columns]:
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     if ratio is None and size is None and samples_per_class is None:
@@ -288,13 +281,13 @@ def undersample_dataset(dataset : Dataset | DatasetDict, labels_column : str | l
         ratio = min(ratio, 1)
 
         num_labels = 0
-        for label in labels_column:
+        for label in label_columns:
             num_labels += np.unique(dataset[label]).size
         
         samples_per_class = dataset.num_rows / num_labels * ratio
         samples_per_class = int(math.floor(samples_per_class))
 
-    return _get_n_samples_per_class(dataset, samples_per_class, labels_column, shuffle=shuffle, seed=seed)
+    return _get_n_samples_per_class(dataset, samples_per_class, label_columns, shuffle=shuffle, seed=seed)
 
 def _format_dataset(examples : Dataset) -> dict:
     """
@@ -342,24 +335,24 @@ def _sample_label_to_string(sample : dict, class_label_names : list, label_colum
     sample[label_column] = class_label_names[ int(sample[label_column]) ]
     return sample
 
-def class_decode_column(dataset : Dataset, labels_column : str | list, strip : bool = True) -> tuple[Dataset, dict[str, list[str]]]:
+def class_decode_column(dataset : Dataset, label_columns : str | list, strip : bool = True) -> tuple[Dataset, dict[str, list[str]]]:
     """Given a Dataset, cast a given column from a ClassLabel to a Value with string data type.
 
     Args:
         dataset (Dataset): The dataset.
-        labels_column (str): Which column(s) to convert from ClassLabel to string.
+        label_columns (str): Which column(s) to convert from ClassLabel to string.
         strip (bool, optional): Whether to strip the list of all label names to remove duplicates. Defaults to True.
 
     Returns:
-        dataset (Dataset): The dataset with labels_column converted from ClassLabel to string.
+        dataset (Dataset): The dataset with label_columns converted from ClassLabel to string.
         label_names (dict[str, list[str]]): List of all unique class names for each label.
                                             E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
     """
     
-    if type(labels_column) is str: labels_column = [labels_column]
+    if type(label_columns) is str: label_columns = [label_columns]
     
     label_names = {}
-    for label in labels_column:
+    for label in label_columns:
         # Map the class label column from integer to string.
         if type(dataset.features[label]) is ClassLabel:
             class_names = dataset.features[label].names
@@ -419,18 +412,19 @@ def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_
 
     return dataset
 
-def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list = "text", labels_column : str | list = "label") -> tuple[Dataset, list]:
+def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | list, label_columns : str | list = "label") -> tuple[Dataset, dict]:
     """
     Pre-process a supervised text-classification dataset into a format usable for fine-tuning.
 
     Args:
         dataset (Dataset | DatasetDict): A supervised text-classification dataset.
-        text_column (str | list): The column name(s) for the input text column (X).
-        labels_column (str, optional): The column name(s) for the output label column (y). Defaults to "label".
+        text_columns (str | list): The column name(s) for the input text column (X).
+        label_columns (str | list, optional): The column name(s) for the output label column (y). Defaults to "label".
     
     Returns:
         formatted_dataset (Dataset): The dataset in conversational format.
-        label_names (list): The list of class label names.
+        label_names (dict): List of all unique class names for each label.
+                            E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
     """
     
     # If the dataset is actually a container of datasets,
@@ -439,43 +433,43 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_column : str | list
         label_names = []
         dataset = copy(dataset) # Shallow copy the DatasetDict to prevent the original being modified
         for subset in dataset.keys():
-            dataset[subset], new_labels = preprocess_dataset(dataset[subset], text_column, labels_column)
+            dataset[subset], new_labels = preprocess_dataset(dataset[subset], text_columns, label_columns)
             if len(new_labels) > len(label_names): label_names = new_labels
         return dataset, label_names
 
-    # Convert text_column into a list if it is not already
-    if type(text_column) is str: text_column = [text_column]
-    if type(labels_column) is str: labels_column = [labels_column]
+    # Convert text_columns into a list if it is not already
+    if type(text_columns) is str: text_columns = [text_columns]
+    if type(label_columns) is str: label_columns = [label_columns]
 
-    for column in [*text_column, *labels_column]:
+    for column in [*text_columns, *label_columns]:
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     # Select only the text and label columns.
-    dataset = dataset.select_columns([*text_column,*labels_column])
+    dataset = dataset.select_columns([*text_columns,*label_columns])
     
     # If there are multiple input text features, combine them into one using JSON formatting
-    if len(text_column) > 1:
-        dataset = combine_columns(dataset, text_column, new_column_name="text")
+    if len(text_columns) > 1:
+        dataset = combine_columns(dataset, text_columns, new_column_name="text")
         
-        # Convert text_column into a string pointing to the combined column
-        text_column = "text"
+        # Convert text_columns into a string pointing to the combined column
+        text_columns = "text"
     else:
-        # Convert text_column into a string pointing to the combined column
-        text_column = text_column[0]
+        # Convert text_columns into a string pointing to the combined column
+        text_columns = text_columns[0]
 
     # Map the class label column(s) from integer to string.
-    dataset, label_names = class_decode_column(dataset, labels_column)
+    dataset, label_names = class_decode_column(dataset, label_columns)
 
     # If there are multiple labels, combine them into one using JSON formatting
-    if len(labels_column) > 1:
-        dataset = combine_columns(dataset, labels_column, new_column_name="label")
-        labels_column = "label"
+    if len(label_columns) > 1:
+        dataset = combine_columns(dataset, label_columns, new_column_name="label")
+        label_columns = "label"
     else:
-        labels_column = labels_column[0]
+        label_columns = label_columns[0]
 
     # Convert the dataset into prompt/completion format.
-    dataset = dataset.rename_column(text_column, "prompt")
-    dataset = dataset.rename_column(labels_column, "completion")
+    dataset = dataset.rename_column(text_columns, "prompt")
+    dataset = dataset.rename_column(label_columns, "completion")
 
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
