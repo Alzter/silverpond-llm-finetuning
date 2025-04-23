@@ -383,6 +383,21 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
         
         return class_ids
         #raise ValueError(f"Could not parse JSON data from model_response: {model_response}")
+    
+    # If the response JSON has as many entries as the labels:
+    if len(response_dict) == len(label_names):
+
+        # Fill in any missing label fields with
+        # the item with a corresponding index
+        # from the response JSON, assuming the
+        # labels are in the correct order and
+        # are misnamed.
+        for i, label in enumerate(label_names.keys()):
+            if label not in response_dict:
+                try:
+                    key = list(response_dict.keys())[i]
+                    response_dict[label] = response_dict[key]
+                except Exception: continue
 
     # For each class label
     class_ids = {}
