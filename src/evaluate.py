@@ -442,6 +442,7 @@ def evaluate(
     # Add an "I don't know" label to the end of the label names list.
     # We will need this as a fallback if the LLM does not provide a
     # class label in its answer.
+    label_names = label_names.copy() # Create a copy of label_names so we don't directly modify it
     for l in label_names.keys(): label_names[l].append("Unknown")
 
     labels_pred = []
