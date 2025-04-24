@@ -10,6 +10,7 @@ from copy import copy
 import math
 import warnings
 import json
+import os
 
 transformers.set_seed(42) # Enable deterministic LLM output
 
@@ -476,7 +477,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
 
     return dataset, label_names
 
-def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, output_dir : str | None = None) -> None:
+def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, output_dir : str | None = None) -> DataFrame:
     """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
@@ -486,6 +487,9 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
         lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
         sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
         output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``.
+    
+    Returns:
+        result (DataFrame): The training history as a DataFrame. The columns are ["Step", "Training Loss"], where "Step" is the epoch and "Training Loss" is the loss value.
     """
     if output_dir is None:
         output_dir = sft_config.output_dir
@@ -503,6 +507,13 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
 
     trainer.train()
     trainer.save_model(output_dir)
+
+    try:
+        result = pd.DataFrame(trainer.state.log_history)
+        return result
+    except Exception as e:
+        warnings.warn(f"Error saving training results for model.\n{str(e)}")
+        return None
 
 def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
     """
