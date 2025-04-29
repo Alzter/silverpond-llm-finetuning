@@ -314,22 +314,27 @@ def _get_class_id_from_model_response(model_response : str, label_names : list) 
         if response_trimmed == label_truncated:
             return i
     
+    # Regex match to last label in string
     try:
+        # Regex escape each label name
+        sanitised_label_names = [re.escape(label) for label in label_names]
+        # Make every space character optional
+        sanitised_label_names = [label.replace(" ", " *") for label in sanitised_label_names]
         # Concatenate all label names using boolean OR.
-        match = "|".join(label_names).lower().replace(" ", r"\s*")
+        match = "|".join(sanitised_label_names)
 
         # Find all instances of label name strings within the base string.
-        matches = re.findall(match, model_response)
+        matches = re.findall(match, model_response, flags = re.IGNORECASE)
 
-        # If the string contains at least one instance of a class label:
-        if len(matches) > 0:
+        if matches:
             # Get the last matching label from the string.
             final_match = matches[-1]
 
-            # Remove all capitalisation, non-alphabetic characters, and whitespace
-            labels_sanitised = [re.sub("[^a-z]", "", label.lower()) for label in label_names]
-            match_sanitised = re.sub("[^a-z]", "", final_match.lower())
-            
+            # Remove all capitalisation and whitespace to find the match's index
+            # in the original list of label names.
+            labels_sanitised = [i.lower().replace(" ", "") for i in label_names]
+            match_sanitised = final_match.lower().replace(" ", "")
+
             # Return the matching class ID for the label.
             class_id = labels_sanitised.index(match_sanitised)
             return class_id
