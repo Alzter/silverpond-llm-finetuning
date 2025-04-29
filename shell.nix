@@ -34,6 +34,7 @@ let
 in
 pkgs.mkShell {
     buildInputs = with pkgs; [
+        tmux
         (python312.withPackages (p: with p; [
             ipykernel
             jupyter
