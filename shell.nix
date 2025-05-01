@@ -56,6 +56,7 @@ pkgs.mkShell {
             pytest
             openpyxl
             xlrd
+            imbalanced-learn
 #             tyro
 #             cut-cross-entropy
 #             unsloth
