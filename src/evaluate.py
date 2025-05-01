@@ -50,8 +50,8 @@ class EvaluationConfig:
     prompt : str | None = None
     prompt_role : str = 'system'
     do_sample : bool = False,
-    temperature : float | None = None,
-    top_p : float | None = None,
+    temperature : float | None = None
+    top_p : float | None = None
     top_k : float | None = None
     
     @classmethod
