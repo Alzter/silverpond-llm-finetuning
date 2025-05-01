@@ -384,7 +384,7 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     # If we have more than one label, assume the model's response is in JSON format
 
     # Attempt to find a JSON object within the model's response
-    match = re.search(r"{.*}", model_response)
+    match = re.search(r"{[^}]*}", model_response)
     if match: model_response = match.group()
 
     # Attempt to parse the model's response as a dictionary of predicted class labels
