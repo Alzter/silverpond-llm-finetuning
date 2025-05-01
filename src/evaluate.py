@@ -28,10 +28,8 @@ def _sanitize_string(string) -> str:
 @dataclass
 class EvaluationConfig:
     """
-    Defines how LLMs should be instructed to classify each text sample in a classification dataset.
-    You can specify different configurations for different prompting techniques.
-
-    NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
+    Defines what instructions and hyperparameters to give an LLM to classify each sample in a text classification dataset.
+    You can specify different configurations for different prompting and generation techniques.
 
     Args:
         name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
@@ -40,12 +38,23 @@ class EvaluationConfig:
                           you can set this value to 1. The LLM will only return the first few
                           letters of the class label, but this is usually enough to identify
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
-        prompt (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
+        prompt (str, optional): Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
+        prompt_role (str, optional): What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.
+        do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
+        kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
     """
     name : str
     max_tokens : int
     prompt : str | None = None
-    # extractor_method : func
+    prompt_role : str = 'system'
+    do_sample : bool = False,
+    temperature : float | None = None,
+    top_p : float | None = None,
+    top_k : float | None = None,
+    kwargs : dict = {}
     
     @classmethod
     def from_dict(cls, data_dict: dict):
@@ -438,7 +447,7 @@ def evaluate(
         label_names (dict): List of all unique class names for each label.
                             E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
         eval_dataset (Dataset): The evaluation dataset. Must be preprocessed (see ``finetune.preprocess_dataset()``).
-        eval_config (EvaluationConfig): Controls what instructions to give to the LLM to classify each sample.
+        eval_config (EvaluationConfig): Defines what instructions and parameters to give to the LLM to classify each sample.
 
     Returns:
         EvaluationResult: Raw evaluation data, including all samples, predicted/actual labels, and the LLM's response for each sample.
@@ -464,7 +473,7 @@ def evaluate(
         
         # Generate a classification prompt for the sample
         prompt = [
-            {"role":"system", "content":eval_config.prompt},
+            {"role":eval_config.prompt_role, "content":eval_config.prompt},
             {"role":"user", "content":text}
         ]
         # Remove the system prompt from the chat template if none was specified
@@ -474,7 +483,10 @@ def evaluate(
         # Get the LLM to generate an answer
         response = ft.generate(
                             prompt=prompt, model=model, tokenizer=tokenizer,
-                            max_new_tokens = eval_config.max_tokens
+                            max_new_tokens = eval_config.max_tokens,
+                            do_sample=eval_config.do_sample, temperature=eval_config.temperature,
+                            top_p=eval_config.top_p, top_k=eval_config.top_k,
+                            kwargs=eval_config.kwargs
                             )
         
         # Extract the class ID(s) from the LLM's answer if one exists
