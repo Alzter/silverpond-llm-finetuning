@@ -491,12 +491,15 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
     Returns:
         result (DataFrame): The training history as a DataFrame. The columns are ["Step", "Training Loss"], where "Step" is the epoch and "Training Loss" is the loss value.
     """
+
+    if type(model) is AutoPeftModelForCausalLM:
+        raise Exception("Cannot finetune model because it is already finetuned. Merge the adapters into base model to train further.")
+    
     if output_dir is None:
         output_dir = sft_config.output_dir
-    
-    if type(model) is not AutoPeftModelForCausalLM:
-        model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, lora_config)
+
+    model = prepare_model_for_kbit_training(model)
+    model = get_peft_model(model, lora_config)
 
     trainer = SFTTrainer(
         model=model,
