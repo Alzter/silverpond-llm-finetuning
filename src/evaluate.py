@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import time, json
 from datetime import timedelta
+import warnings
 
 def _sanitize_string(string) -> str:
     """Make a given string safe for use within a file path.
@@ -382,12 +383,15 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     
     # If we have more than one label, assume the model's response is in JSON format
 
+    # Attempt to find a JSON object within the model's response
+    match = re.search(r"{.*}", model_response)
+    if match: model_response = match.group()
+
     # Attempt to parse the model's response as a dictionary of predicted class labels
     try:
         response_dict = json.loads(model_response)
     except Exception:
-        
-        print(f"Could not extract JSON from response: {model_response}")
+        warnings.warn(f"Could not extract JSON from response: {model_response}")
         # If the model's response is not valid JSON, simply return each label as unknown
         class_ids = {}
         for label, class_names in label_names.items():
