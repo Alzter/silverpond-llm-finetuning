@@ -44,8 +44,7 @@ class EvaluationConfig:
         temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
         top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
-        kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
-    """
+        """
     name : str
     max_tokens : int
     prompt : str | None = None
@@ -53,8 +52,7 @@ class EvaluationConfig:
     do_sample : bool = False,
     temperature : float | None = None,
     top_p : float | None = None,
-    top_k : float | None = None,
-    kwargs : dict = {}
+    top_k : float | None = None
     
     @classmethod
     def from_dict(cls, data_dict: dict):
@@ -485,8 +483,7 @@ def evaluate(
                             prompt=prompt, model=model, tokenizer=tokenizer,
                             max_new_tokens = eval_config.max_tokens,
                             do_sample=eval_config.do_sample, temperature=eval_config.temperature,
-                            top_p=eval_config.top_p, top_k=eval_config.top_k,
-                            kwargs=eval_config.kwargs
+                            top_p=eval_config.top_p, top_k=eval_config.top_k
                             )
         
         # Extract the class ID(s) from the LLM's answer if one exists
