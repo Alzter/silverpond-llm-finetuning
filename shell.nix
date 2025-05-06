@@ -1,5 +1,5 @@
 let
-    pkgs = import <nixpkgs> {
+    pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/ed30f8aba416.tar.gz") {
         config = {
             enableCuda = true;
             allowUnfree = true;
@@ -24,17 +24,37 @@ let
 #                           unsloth-zoo = final_.callPackage ./build/unsloth-zoo/default.nix { };
 #                           tyro = final_.callPackage ./build/tyro/default.nix { };
 #                           cut-cross-entropy = final_.callPackage ./build/cut-cross-entropy/default.nix { };
-                        };
+                        sklearn-compat = final_.buildPythonPackage rec { # Use pre-compiled version of sklearn-compat
+                            pname = "sklearn_compat";
+                            version = "0.1.3";
+                            format = "wheel";
+
+                            src = final_.fetchPypi {
+                                inherit pname version format;
+                                sha256 = "sha256-qKr473EZiMvWPxh8VWC18Wsl32Y6qh0tDhKRNB0zn4A=";
+                                dist = "py3";
+                                python = "py3";
+                            };
+
+                            propagatedBuildInputs = with final_; [ scikit-learn ];
+#                             doCheck = false;
+                          };
+                          imbalanced-learn = prev_.imbalanced-learn.overridePythonAttrs(imbalPrevAttrs: {
+                            dependencies = imbalPrevAttrs.dependencies ++ [ final_.sklearn-compat ];
+                            doCheck = false;
+                          });
+                       };
                     };
                 }
             )
-
         ];
 };
 in
 pkgs.mkShell {
     buildInputs = with pkgs; [
         tmux
+        lunarvim
+        gh
         (python312.withPackages (p: with p; [
             ipykernel
             jupyter
