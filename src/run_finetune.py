@@ -14,6 +14,7 @@ sys.path.append("../src/")
 import finetune as ft
 import evaluate as ev
 
+import model_prompts as prompts
 from evaluate import EvaluationConfig
 
 def evaluate_model(configurations, model, tokenizer, label_names, eval_dataset):
@@ -21,7 +22,7 @@ def evaluate_model(configurations, model, tokenizer, label_names, eval_dataset):
     for config in configurations:
         result = ev.evaluate(
             model=model, tokenizer=tokenizer, label_names=label_names,
-            eval_dataset=eval_dataset, eval_config=config
+            eval_dataset=dataset['test'], eval_config=config
         )
         results.append(result)
     return results
@@ -34,9 +35,8 @@ def save_results(results):
 # # ▶️ Load EQ dataset
 import pandas as pd
 
-data = pd.read_csv(
-    os.path.join(ROOT_DIR, "datasets/preprocessed.csv"),
-    low_memory=False)
+data_train = pd.read_csv( os.path.join(ROOT_DIR, "datasets/preprocessed_train.csv"), low_memory=False )
+data_eval  = pd.read_csv( os.path.join(ROOT_DIR, "datasets/preprocessed_eval.csv"),  low_memory=False )
 
 input_features = [
 "OUTAGE_ID",
@@ -57,76 +57,12 @@ output_labels = [
     "MSSS_CAUSE_DESCRIPTION"
 ]
 
-# Shuffle the data in a deterministic way
-data = data.sample(frac=1, random_state=42)
-
-from imblearn.over_sampling import RandomOverSampler
-ros = RandomOverSampler(random_state=42)
-
-# Supervised dataset
-data_train = data.dropna(subset=output_labels, how='any')
-
-# Unsupervised dataset
-data_eval = data.drop(data_train.index)
-
-from copy import copy
-data_resampled = copy(data_train)
-size = len(data_resampled)
-
-# Remove all classes with less than 20 samples
-
-min_class_size = 20
-while True:
-    for label in output_labels:
-        class_counts = data_resampled[label].value_counts()
-        classes_to_remove = class_counts.where(lambda x: x <= min_class_size).dropna().keys().to_list()
-        data_resampled = data_resampled[~data_resampled[label].isin(classes_to_remove)]
-
-    if [data_resampled[label].value_counts().where(lambda x: x <= min_class_size).dropna().size for label in output_labels] == [0] * len(output_labels):
-        break
-
-for label in output_labels:
-    features = input_features + [i for i in output_labels if not i == label]
-
-    X, y = data_resampled[features], data_resampled[label]
-
-    X, y = ros.fit_resample(X, y)
-
-    data_resampled = pd.concat([X, y], axis=1)
-    data_resampled = data_resampled.dropna()
-    data_resampled = data_resampled.sample(n=size)
-
-from matplotlib import pyplot as plt
-
-for i, label in enumerate(output_labels):
-    ax = plt.subplot(2,3,i + 1)
-    plt.plot(data_train[label].value_counts())
-    plt.xticks([])
-    #plt.ylim([0,10000])
-    plt.title(label.rstrip("DESCRIPTION").lstrip("MSSS"))
-    ax.set_yscale('log')
-    plt.ylim([1, 100000])
-
-plt.suptitle("MSSS class distribution")
-for i, label in enumerate(output_labels):
-    ax = plt.subplot(2,3,i + 4)
-    plt.plot(data_resampled[label].value_counts())
-    plt.xticks([])
-    #plt.ylim([0,10000])
-    plt.title(label.rstrip("DESCRIPTION").lstrip("MSSS"))
-    ax.set_yscale('log')
-    plt.ylim([1, 100000])
-
-plt.tight_layout()
-
-data_train = data_resampled
-
 # Convert DataFrame into a Dataset
 dataset = ft.create_dataset_from_dataframe(data_train, input_features, output_labels, test_size=0.2)
 
 # Reduce the size of the dataset for testing purposes
-#dataset['train'] = dataset['train'].shard(5, 0) # First 20% of the train dataset
-dataset['test'] = dataset['test'].shard(5, 0) # First 20% of the test dataset
+# dataset['train'] = dataset['train'].shard(5, 0) # First 20% of the train dataset
+# dataset['test'] = dataset['test'].shard(5, 0) # First 20% of the test dataset
 
 # Preprocess the dataset into a form usable for supervised finetuning
 dataset, label_names = ft.preprocess_dataset(dataset,text_columns=input_features,label_columns=output_labels)
