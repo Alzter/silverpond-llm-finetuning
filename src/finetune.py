@@ -518,6 +518,31 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
         warnings.warn(f"Error saving training results for model.\n{str(e)}")
         return None
 
+def load_llm(model_name_or_path : str, device_map : str = "cuda:0", quantized : bool = True) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+    """
+    Load an LLM from disk or from huggingface.co/models.
+
+    Args:
+        model_name_or_path (str): Name of the model.
+        device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+        quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
+
+    Returns:
+        model (AutoPeftModelForCausalLM): The LLM.
+        tokenizer (AutoTokenizer): The tokenizer.
+    """
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=False,
+        bnb_4bit_compute_dtype=torch.float16
+    ) if quantized else None
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    model = AutoModelForCausalLM(model_name_or_path, device_map=device_map, quantization_config=bnb_config)
+
+    return (model, tokenizer)
+
 def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
     """
     Load a finetuned LLM from disk.
