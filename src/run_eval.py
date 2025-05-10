@@ -16,9 +16,8 @@ def main(args):
     print(f"Prompt is None: {args.prompt is None}")
     print(f"Prompt Role: {args.prompt_role}")
     
-    import evaluate
     from evaluate import EvaluationConfig
-    config = EvaluationConfig(
+    eval_config = EvaluationConfig(
         name = args.technique_name,
         max_tokens = args.max_tokens,
         prompt = args.prompt,
@@ -29,16 +28,20 @@ def main(args):
         top_k = args.top_k
     )
     
-    # TODO: Load dataset
-    
-    # TODO: Load model
-
+    # Load evaluation dataset
     import finetune as ft
-    model, tokenizer = ft.load_llm(args.model_name_or_path, quantized=args.model_quantized, device_map='auto')
+    eval_dataset, label_names = ft.load_dataset(args.dataset_name_or_path, args.text_columns, args.label_columns, test_size=0)
     
-    # TODO: Run evaluation
+    # Load model
+    device_map = "cuda:0" if len(args.cuda_visible_devices) == 1 else "auto"
+    model, tokenizer = ft.load_llm(args.model_name_or_path, quantized=args.model_quantized, device_map=device_map)
     
-    # TODO: Save evaluation results
+    # Run evaluation
+    import evaluate as ev
+    result = ev.evaluate(model=model,tokenizer=tokenizer,label_names=label_names,eval_dataset=eval_dataset,eval_config=eval_config)
+    
+    # Save evaluation results
+    result.save(args.out_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -47,10 +50,12 @@ if __name__ == "__main__":
     parser.add_argument("model_name_or_path", type=str, help='Path to pretrained model or model identifier from huggingface.co/models.')
     parser.add_argument("max_tokens", type=int, help='How many tokens the LLM is allowed to produce to classify each sample.')
     
-    parser.add_argument("dataset", type=str, help="Path to dataset to evaluate model from.")
+    parser.add_argument("dataset_name_or_path", type=str, help='Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.')
+    parser.add_argument("text_columns", type=str, help='Which column(s) to use from the dataset as input text (X).')
+    parser.add_argument("label_columns", type=str, help='Which column(s) to use from the dataset as output labels (y).')
     
     parser.add_argument("-c", "--cuda_visible_devices", type=str, default="1", help='Which GPU devices to use to evaluate the model. For multiple devices, separate values with commas.')
-    parser.add_argument("-o", "--out_path", type=str, default='results', help="Path to save evaluation results.")
+    parser.add_argument("-o", "--out_path", type=str, default='results', help="Which path to save evaluation results to.")
     
     parser.add_argument("-mq", "--model_quantized", action="store_true", help='Load the LLM with 4-bit quantization.')
 
