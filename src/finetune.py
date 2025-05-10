@@ -1,4 +1,5 @@
 from datasets import Dataset, Value, ClassLabel, DatasetDict
+from datasets import load_dataset as hf_load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
 from trl import SFTConfig, SFTTrainer
@@ -475,6 +476,40 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
     # Convert the dataset into conversational format
     dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
 
+    return dataset, label_names
+
+def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : int = 0) -> tuple[DatasetDict | Dataset, dict]:
+    """
+    Load and pre-process a supervised text classification dataset for LLM fine-tuning and evaluation.
+
+    Args:
+        dataset_name_or_path (str): Accepts the name of a dataset from the HuggingFace Hub or the path of a CSV file to load.
+        text_columns (str | list[str]): Which column(s) to use from the dataset as input text (X).
+        label_columns (str | list[str]): Which column(s) to use from the dataset as output labels (y).
+        test_size (int, optional): If given, splits the dataset into train/test subsets using test_size as the test ratio. Defaults to 0.
+    """
+
+    dataset = None
+
+    # Attempt to load the Dataset from the HuggingFace Hub
+    try:
+        dataset = hf_load_dataset(dataset_name_or_path)
+        if type(dataset) is Dataset:
+            if test_size: dataset = dataset.train_test_split(test_size = test_size)
+    except Exception: dataset = None
+    
+    # Attempt to load Dataset from a CSV file
+    if dataset_name_or_path.endswith(".csv") and os.path.isfile(dataset_name_or_path):
+        try:
+            dataset = pd.read_csv( dataset_name_or_path, low_memory = False )
+        except Exception as e:
+            raise Exception(f"Error reading CSV dataset at {dataset_name_or_path}. Error message: {str(e)}")
+        dataset = create_dataset_from_dataframe(dataset, text_columns=text_columns, label_columns=label_columns, test_size=test_size)
+
+    if not dataset:
+        raise Exception(f"Dataset {dataset_name_or_path} does not point to a Dataset on the HuggingFace hub or a CSV file.")
+    
+    dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
     return dataset, label_names
 
 def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, output_dir : str | None = None) -> DataFrame:
