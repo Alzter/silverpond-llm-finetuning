@@ -38,9 +38,18 @@ class ModelArguments:
             "help": "chatml|zephyr|none. Pass `none` if the dataset is already formatted with the chat template."
         },
     )
-    lora_alpha: Optional[int] = field(default=16)
-    lora_dropout: Optional[float] = field(default=0.1)
-    lora_r: Optional[int] = field(default=64)
+    lora_alpha: Optional[int] = field(
+        metadata={"help":'Scaling factor for LoRA layers (higher = stronger adaptation)'},
+        default=16
+    )
+    lora_dropout: Optional[float] = field(
+        metadata={"help":'Dropout probability for LoRA layers (helps prevent overfitting)'},
+        default=0.1
+    )
+    lora_r: Optional[int] = field(
+        metadata={"help":'Rank of the LoRA adapter. Lower ranks train fewer parameters (smaller = more compression)'},
+        default=64
+    )
     lora_target_modules: Optional[str] = field(
         default="q_proj,k_proj,v_proj,o_proj,down_proj,up_proj,gate_proj",
         metadata={"help": "comma separated list of target modules to apply LoRA layers to"},
