@@ -1,5 +1,6 @@
 import dataclasses
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
+from typing import Optional
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import os, shutil, re
@@ -33,7 +34,7 @@ class EvaluationConfig:
     You can specify different configurations for different prompting and generation techniques.
 
     Args:
-        name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
+        technique_name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
         max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
@@ -46,14 +47,35 @@ class EvaluationConfig:
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
         top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
         """
-    name : str
-    max_tokens : int
-    prompt : str | None = None
-    prompt_role : str = 'system'
-    do_sample : bool = False
-    temperature : float | None = None
-    top_p : float | None = None
-    top_k : float | None = None
+    technique_name : str = field(
+        metadata = {"help" : 'The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".'}
+    )
+    max_tokens : int = field(
+        metadata = {"help" : 'How many tokens the LLM is allowed to produce to classify each sample.'}
+    )
+    prompt : Optional[str] = field(
+        metadata = {"help" : 'Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.'}
+    )
+    prompt_role : Optional[str] = field(
+        default='system',
+        metadata = {"help" : 'What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.'}
+    )
+    do_sample : Optional[bool] = field(
+        default=False,
+        metadata = {"help" : 'If False, enables deterministic generation. Defaults to False.'}
+    )
+    temperature : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False.'}
+    )
+    top_p : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False.'}
+    )
+    top_k : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False.'}
+    )
     
     @classmethod
     def from_dict(cls, data_dict: dict):
@@ -185,7 +207,7 @@ class EvaluationResult:
             display_labels=label_names_truncated
             )
             
-        disp.ax_.set_title( f"{label_name} ({self.config.name})" )
+        disp.ax_.set_title( f"{label_name} ({self.config.technique_name})" )
 
         if not include_values:
             disp.ax_.set_xticks([])
@@ -216,7 +238,7 @@ class EvaluationResult:
         """
         
         # Make result name file safe
-        result_path_name = _sanitize_string(self.config.name)
+        result_path_name = _sanitize_string(self.config.technique_name)
 
         if not output_dir:
             output_dir = result_path_name

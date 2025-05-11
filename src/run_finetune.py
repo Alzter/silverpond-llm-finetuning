@@ -1,45 +1,80 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-import argparse
 import os
+import sys
+from dataclasses import dataclass, field
+from typing import Optional
 
-def main(args):
-    
-    print(args.cuda_visible_devices)
-    os.environ["CUDA_VISIBLE_DEVICES"]=args.cuda_visible_devices
+from transformers import HfArgumentParser, set_seed
+from trl import SFTConfig, SFTTrainer
+from utils import create_and_prepare_model
+import finetune as ft
+from utils import ModelArguments, DatasetArguments
 
-    # Load model
-    device_map = "cuda:0" if len(args.cuda_visible_devices) == 1 else "auto"
-    model, tokenizer = ft.load_llm(args.model_name_or_path, quantized=args.model_quantized, device_map=device_map)
+def main(model_args, data_args, training_args):
+    os.environ["CUDA_VISIBLE_DEVICES"] = model_args.cuda_devices
+    # Set seed for reproducibility
+    set_seed(training_args.seed)
+
+    # model
+    model, peft_config, tokenizer = create_and_prepare_model(model_args)
+
+    # gradient ckpt
+    model.config.use_cache = not training_args.gradient_checkpointing
+    training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
+    if training_args.gradient_checkpointing:
+        training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
+
+    # Load training dataset
+    train_dataset, label_names = ft.load_dataset(
+        data_args.dataset_name_or_path,
+        data_args.text_columns,
+        data_args.label_columns,
+        test_size=0
+    ) 
+
+    #training_args.dataset_kwargs = {
+    #    "append_concat_token": data_args.append_concat_token,
+    #    "add_special_tokens": data_args.add_special_tokens,
+    #}
+
+    # datasets
+    #train_dataset, eval_dataset = create_datasets(
+    #    tokenizer,
+    #    data_args,
+    #    training_args,
+    #    apply_chat_template=model_args.chat_template_format != "none",
+    #)
     
-    # TODO: 
+    # trainer
+    trainer = SFTTrainer(
+        model=model,
+        processing_class=tokenizer,
+        args=training_args,
+        train_dataset=train_dataset,
+        #eval_dataset=eval_dataset,
+        peft_config=peft_config,
+    )
+    trainer.accelerator.print(f"{trainer.model}")
+    if hasattr(trainer.model, "print_trainable_parameters"):
+        trainer.model.print_trainable_parameters()
+
+    # train
+    checkpoint = None
+    if training_args.resume_from_checkpoint is not None:
+        checkpoint = training_args.resume_from_checkpoint
+    trainer.train(resume_from_checkpoint=checkpoint)
+
+    # saving final model
+    if trainer.is_fsdp_enabled:
+        trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+    trainer.save_model()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    
-    parser.add_argument("technique_name", type=str, help='The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".')
-    parser.add_argument("model_name_or_path", type=str, help='Path to pretrained model or model identifier from huggingface.co/models.')
-    parser.add_argument("max_tokens", type=int, help='How many tokens the LLM is allowed to produce to classify each sample.')
-    
-    parser.add_argument("dataset_name_or_path", type=str, help='Which training dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.')
-    parser.add_argument("text_columns", type=str, help='Which column(s) to use from the dataset as input text (X).')
-    parser.add_argument("label_columns", type=str, help='Which column(s) to use from the dataset as output labels (y).')
-    
-    parser.add_argument("-c", "--cuda_visible_devices", type=str, default="1", help='Which GPU devices to use to evaluate the model. For multiple devices, separate values with commas.')
-    parser.add_argument("-o", "--out_path", type=str, default='results', help="Which path to save evaluation results to.")
-    
-    parser.add_argument("-mq", "--model_quantized", action="store_true", help='Load the LLM with 4-bit quantization.')
-    parser.add_argument("--epochs", type=int, default=2, help="How many epochs to run training for")
-    parser.add_argument("--lora_rank_dimension", type=float, default=6, help="The rank of the adapter, the lower the fewer parameters you'll need to train. (smaller = more compression)")
-    parser.add_argument("--lora_alpha", type=float, default=8, help="The scaling factor for LoRA layers (higher = stronger adaptation)")
-    parser.add_argument("--lora_dropout", type=float, default=0.05, help="Dropout probability for LoRA layers (helps prevent overfitting)")
-    parser.add_argument("--max_seq_length", type=int, default=64, help="")
-    parser.add_argument("--learning_rate", type=float, default=2e-4, help="Controls how strongly loss should affect the LoRA adapters")
-	
-
-    args = parser.parse_args()
-
-    main(args)
-
+    parser = HfArgumentParser((ModelArguments, DatasetArguments, SFTConfig))
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+        # If we pass only one argument to the script and it's the path to a json file,
+        # let's parse it to get our arguments.
+        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+    else:
+        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    main(model_args, data_args, training_args)
