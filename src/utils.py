@@ -98,7 +98,7 @@ class ModelArguments:
 @dataclass
 class DatasetArguments:
     
-    dataset_name_or_path : str = field(
+    eval_dataset : str = field(
 		metadata = {"help" : 'Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
 	)
     text_columns : str = field(
@@ -106,6 +106,10 @@ class DatasetArguments:
 	)
     label_columns : str = field(
 		metadata = {"help" : 'Which column(s) to use from the dataset as output labels (y).'}
+	)
+    train_dataset : Optional[str] = field(
+        default=None,
+		metadata = {"help" : 'Which training dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
 	)
     
     # dataset_name: Optional[str] = field(

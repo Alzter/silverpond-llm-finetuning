@@ -13,7 +13,7 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
     # Load evaluation dataset
     import preprocess as pre
     eval_dataset, label_names = pre.load_dataset(
-        data_args.dataset_name_or_path,
+        data_args.eval_dataset,
         data_args.text_columns,
         data_args.label_columns,
         test_size=0

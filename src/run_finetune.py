@@ -25,12 +25,12 @@ def main(model_args, data_args, training_args):
     
     # Load training dataset
     import preprocess as pre
-    train_dataset, label_names = pre.load_dataset(
-        data_args.dataset_name_or_path,
+    train_dataset, eval_dataset, label_names = pre.load_datasets(
+        data_args.train_dataset,
+        data_args.eval_dataset,
         data_args.text_columns,
         data_args.label_columns,
-        test_size=0
-    ) 
+    )
 
     #training_args.dataset_kwargs = {
     #    "append_concat_token": data_args.append_concat_token,
@@ -51,7 +51,7 @@ def main(model_args, data_args, training_args):
         processing_class=tokenizer,
         args=training_args,
         train_dataset=train_dataset,
-        #eval_dataset=eval_dataset,
+        eval_dataset=eval_dataset,
         peft_config=peft_config,
     )
 
