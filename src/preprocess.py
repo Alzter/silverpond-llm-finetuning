@@ -9,6 +9,7 @@ import math
 import warnings
 import json
 import os
+import multiprocessing
 
 set_seed(42) # Enable deterministic LLM output
 
@@ -115,7 +116,7 @@ def select_top_n_classes(dataset : Dataset | DatasetDict, n : int = 10, label_co
         return dataset
     
     for label in label_columns:
-        dataset = dataset.filter(lambda x : x[label] in top_n_labels[label])
+        dataset = dataset.filter(lambda x : x[label] in top_n_labels[label], num_proc=multiprocessing.cpu_count())
 
         # If the labels column is a ClassLabel, we also have to update the label names to match the new classes.
         if type(dataset.features[label]) is ClassLabel:
@@ -361,7 +362,7 @@ def class_decode_column(dataset : Dataset, label_columns : str | list, strip : b
             dataset = dataset.cast_column(label, Value(dtype='string'))
 
             # Replace all class label IDs with label names.
-            dataset = dataset.map( lambda sample : _sample_label_to_string(sample, class_names, label_column=label) )
+            dataset = dataset.map( lambda sample : _sample_label_to_string(sample, class_names, label_column=label), num_proc=multiprocessing.cpu_count() )
         else:
             class_names = dataset[label]
             if strip: class_names = [n.strip() for n in class_names]
@@ -406,7 +407,7 @@ def combine_columns(dataset : Dataset | DatasetDict, columns : list, new_column_
             dataset[subset] = combine_columns(dataset[subset], columns, new_column_name, delete_columns)
         return dataset
 
-    dataset = dataset.map(lambda x: _combine_columns_as_json(x, columns, new_column_name))
+    dataset = dataset.map(lambda x: _combine_columns_as_json(x, columns, new_column_name), num_proc=multiprocessing.cpu_count())
     if delete_columns: dataset = dataset.remove_columns(columns)
 
     return dataset
@@ -471,13 +472,13 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
     dataset = dataset.rename_column(label_columns, "completion")
 
     # Convert the dataset into conversational format
-    dataset = dataset.map(_format_dataset).remove_columns(['prompt', 'completion'])
+    dataset = dataset.map(_format_dataset, num_proc=multiprocessing.cpu_count()).remove_columns(['prompt', 'completion'])
 
     return dataset, label_names
 
 def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : int = 0) -> tuple[Dataset | DatasetDict, dict]:
     """
-    Load and pre-process a supervised text classification dataset for LLM fine-tuning and evaluation.
+    Load and pre-process a supervised text classification dataset.
 
     Args:
         dataset_name_or_path (str): Accepts the name of a dataset from the HuggingFace Hub or the path of a CSV file to load.
@@ -509,4 +510,19 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
     dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
     return dataset, label_names
 
+def load_datasets(train_dataset : str, eval_dataset : str, text_columns : str | list[str], label_columns : str | list[str]):
+    """
+    Load and pre-process two supervised text classification datasets for LLM fine-tuning and evaluation.
 
+    Args:
+        train_dataset (str): Training dataset name or path. Can specify a dataset from the HuggingFace Hub or the path of a CSV file to load.
+        eval_dataset (str): Evaluation dataset name or path. Can specify a dataset from the HuggingFace Hub or the path of a CSV file to load.
+        text_columns (str | list[str]): Which column(s) to use from the datasets as input text (X).
+        label_columns (str | list[str]): Which column(s) to use from the datasets as output labels (y).
+    """
+    
+    train_dataset, label_names = load_dataset(train_dataset, text_columns=text_columns, label_columns=label_columns, test_size=0)
+
+    eval_dataset, _ = load_dataset(eval_dataset, text_columns=text_columns, label_columns=label_columns, test_size=0)
+
+    return (train_dataset, eval_dataset, label_names)
