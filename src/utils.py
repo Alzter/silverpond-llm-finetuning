@@ -96,8 +96,10 @@ class ModelArguments:
     # )
 
 @dataclass
-class DatasetArguments:
-    
+class FinetuneDatasetArguments:
+    train_dataset : str = field(
+		metadata = {"help" : 'Which training dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
+	)
     eval_dataset : str = field(
 		metadata = {"help" : 'Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
 	)
@@ -107,11 +109,21 @@ class DatasetArguments:
     label_columns : str = field(
 		metadata = {"help" : 'Which column(s) to use from the dataset as output labels (y).'}
 	)
-    train_dataset : Optional[str] = field(
-        default=None,
-		metadata = {"help" : 'Which training dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
+
+@dataclass
+class EvalDatasetArguments:
+    eval_dataset : str = field(
+		metadata = {"help" : 'Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
 	)
-    
+    text_columns : str = field(
+		metadata = {"help" : 'Which column(s) to use from the dataset as input text (X).'}
+	)
+    label_columns : str = field(
+		metadata = {"help" : 'Which column(s) to use from the dataset as output labels (y).'}
+	)
+
+
+
     # dataset_name: Optional[str] = field(
     #     default="timdettmers/openassistant-guanaco",
     #     metadata={"help": "The preference dataset to use."},

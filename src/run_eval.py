@@ -1,22 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import argparse
-import os
 from evaluate import EvaluationConfig
-from utils import ModelArguments, DatasetArguments, create_and_prepare_model
-from dataclasses import dataclass, field
-from typing import Optional
+from utils import ModelArguments, EvalDatasetArguments, create_and_prepare_model
 from transformers import HfArgumentParser
 
-def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args : DatasetArguments):
+def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args : EvalDatasetArguments):
     # Load evaluation dataset
     import preprocess as pre
     eval_dataset, label_names = pre.load_dataset(
         data_args.eval_dataset,
         data_args.text_columns,
-        data_args.label_columns,
-        test_size=0
+        data_args.label_columns
     ) 
 
     # Load model
@@ -34,9 +29,9 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
     result.save()
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((EvaluationConfig, ModelArguments, DatasetArguments))
+    parser = HfArgumentParser((EvaluationConfig, ModelArguments, EvalDatasetArguments))
 
     eval_config, model_args, data_args = parser.parse_args_into_dataclasses()
 
-    main(args)
+    main(eval_config, model_args, data_args)
 

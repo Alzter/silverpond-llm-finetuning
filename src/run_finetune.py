@@ -7,9 +7,9 @@ from transformers import HfArgumentParser, set_seed
 from trl import SFTConfig, SFTTrainer
 from utils import create_and_prepare_model
 
-from utils import ModelArguments, DatasetArguments
+from utils import ModelArguments, FinetuneDatasetArguments
 
-def main(model_args, data_args, training_args):
+def main(model_args : ModelArguments, data_args : FinetuneDatasetArguments, training_args : SFTConfig):
     os.environ["CUDA_VISIBLE_DEVICES"] = model_args.cuda_devices
     # Set seed for reproducibility
     set_seed(training_args.seed)
@@ -29,7 +29,7 @@ def main(model_args, data_args, training_args):
         data_args.train_dataset,
         data_args.eval_dataset,
         data_args.text_columns,
-        data_args.label_columns,
+        data_args.label_columns
     )
 
     #training_args.dataset_kwargs = {
@@ -72,7 +72,7 @@ def main(model_args, data_args, training_args):
 
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((ModelArguments, DatasetArguments, SFTConfig))
+    parser = HfArgumentParser((ModelArguments, FinetuneDatasetArguments, SFTConfig))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
