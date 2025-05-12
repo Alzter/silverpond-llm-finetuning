@@ -1,6 +1,6 @@
 import pytest
 import evaluate as ev
-import finetune as ft
+import preprocess as pre
 import model_prompts
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from datasets import load_dataset
@@ -24,8 +24,8 @@ def llm():
 @pytest.fixture
 def eval_dataset():
     eval_data = load_dataset("fancyzhx/dbpedia_14", split="test")
-    eval_data = ft.undersample_dataset(eval_data, label_columns="label", samples_per_class=2)
-    eval_data, label_names = ft.preprocess_dataset(eval_data, text_columns="content", label_columns="label")
+    eval_data = pre.undersample_dataset(eval_data, label_columns="label", samples_per_class=2)
+    eval_data, label_names = pre.preprocess_dataset(eval_data, text_columns="content", label_columns="label")
     return (eval_data, label_names)
 
 @pytest.fixture()

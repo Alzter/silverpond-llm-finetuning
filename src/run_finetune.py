@@ -6,7 +6,7 @@ from typing import Optional
 from transformers import HfArgumentParser, set_seed
 from trl import SFTConfig, SFTTrainer
 from utils import create_and_prepare_model
-import finetune as ft
+
 from utils import ModelArguments, DatasetArguments
 
 def main(model_args, data_args, training_args):
@@ -22,9 +22,10 @@ def main(model_args, data_args, training_args):
     training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
     if training_args.gradient_checkpointing:
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
-
+    
     # Load training dataset
-    train_dataset, label_names = ft.load_dataset(
+    import preprocess as pre
+    train_dataset, label_names = pre.load_dataset(
         data_args.dataset_name_or_path,
         data_args.text_columns,
         data_args.label_columns,
@@ -53,6 +54,7 @@ def main(model_args, data_args, training_args):
         #eval_dataset=eval_dataset,
         peft_config=peft_config,
     )
+
     trainer.accelerator.print(f"{trainer.model}")
     if hasattr(trainer.model, "print_trainable_parameters"):
         trainer.model.print_trainable_parameters()
