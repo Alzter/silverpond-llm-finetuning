@@ -30,6 +30,7 @@ class ModelArguments:
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
     cuda_devices: Optional[str] = field(
+        default="1",
         metadata={"help":"Comma-separated list of GPU IDs to use for training."}
     )
     chat_template_format: Optional[str] = field(
