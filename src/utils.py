@@ -15,7 +15,7 @@ from transformers import (
 from dataclasses import dataclass, field
 from typing import Optional
 
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 DEFAULT_CHATML_CHAT_TEMPLATE = "{% for message in messages %}\n{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% if loop.last and add_generation_prompt %}{{'<|im_start|>assistant\n' }}{% endif %}{% endfor %}"
 DEFAULT_ZEPHYR_CHAT_TEMPLATE = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
@@ -71,9 +71,9 @@ class ModelArguments:
         default="nf4",
         metadata={"help": "Quantization type fp4 or nf4"},
     )
-    use_flash_attn: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Enables Flash attention for training."},
+    attn_implementation : Optional[str] = field(
+        default="sdpa",
+        metadata={"help":'The attention implementation to use in the model (if relevant). Can be any of "eager" (manual implementation of the attention), "sdpa" (using F.scaled_dot_product_attention), or "flash_attention_2" (using Dao-AILab/flash-attention). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual "eager" implementation.'}
     )
     use_peft_lora: Optional[bool] = field(
         default=False,
@@ -97,34 +97,20 @@ class ModelArguments:
     # )
 
 @dataclass
-class FinetuneDatasetArguments:
-    train_dataset : str = field(
-		metadata = {"help" : 'Which training dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
-	)
-    eval_dataset : str = field(
-		metadata = {"help" : 'Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
+class DatasetArguments:
+    dataset : str = field(
+		metadata = {"help" : 'Which dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
 	)
     text_columns : str = field(
 		metadata = {"help" : 'Which column(s) to use from the dataset as input text (X).'}
 	)
     label_columns : str = field(
 		metadata = {"help" : 'Which column(s) to use from the dataset as output labels (y).'}
-	)
-
-@dataclass
-class EvalDatasetArguments:
-    eval_dataset : str = field(
-		metadata = {"help" : 'Which evaluation dataset to use. Can be a dataset from the HuggingFace Hub or the path of a CSV file to load.'}
-	)
-    text_columns : str = field(
-		metadata = {"help" : 'Which column(s) to use from the dataset as input text (X).'}
-	)
-    label_columns : str = field(
-		metadata = {"help" : 'Which column(s) to use from the dataset as output labels (y).'}
-	)
-
-
-
+    )
+    test_size : float = field(
+        default = 0,
+        metadata = {"help" : "What percentage ratio of the dataset should be reserved for testing."}
+    )
     # dataset_name: Optional[str] = field(
     #     default="timdettmers/openassistant-guanaco",
     #     metadata={"help": "The preference dataset to use."},
@@ -258,7 +244,7 @@ def create_and_prepare_model(args : ModelArguments):#, training_args):
             args.model_name_or_path,
             quantization_config=bnb_config,
             trust_remote_code=True,
-            attn_implementation="flash_attention_2" if args.use_flash_attn else "eager",
+            attn_implementation=args.attn_implementation,#"flash_attention_2" if args.use_flash_attn else "eager",
             torch_dtype=torch_dtype,
         )
 
@@ -272,9 +258,12 @@ def create_and_prepare_model(args : ModelArguments):#, training_args):
             bias="none",
             task_type="CAUSAL_LM",
             target_modules=args.lora_target_modules.split(",")
-            if args.lora_target_modules != "all-linear"
+            if args.lora_target_modules is not None and args.lora_target_modules != "all-linear"
             else args.lora_target_modules,
         )
+
+        model = prepare_model_for_kbit_training(model)
+        model = get_peft_model(model, peft_config)
 
     special_tokens = None
     chat_template = None

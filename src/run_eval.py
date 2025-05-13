@@ -2,16 +2,17 @@
 # coding: utf-8
 
 from evaluate import EvaluationConfig
-from utils import ModelArguments, EvalDatasetArguments, create_and_prepare_model
+from utils import ModelArguments, DatasetArguments, create_and_prepare_model
 from transformers import HfArgumentParser
 
-def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args : EvalDatasetArguments):
+def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args : DatasetArguments):
     # Load evaluation dataset
     import preprocess as pre
     eval_dataset, label_names = pre.load_dataset(
-        data_args.eval_dataset,
+        data_args.dataset,
         data_args.text_columns,
-        data_args.label_columns
+        data_args.label_columns,
+        test_size=0
     ) 
 
     # Load model
@@ -29,7 +30,13 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
     result.save()
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((EvaluationConfig, ModelArguments, EvalDatasetArguments))
+    parser = HfArgumentParser((EvaluationConfig, ModelArguments, DatasetArguments))
+
+    # We must assign CUDA_VISIBLE_DEVICES here
+    # before transformers and torch are imported
+    args, _ = parser.parse_known_args()
+    if args.cuda_devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
 
     eval_config, model_args, data_args = parser.parse_args_into_dataclasses()
 

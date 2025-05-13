@@ -1,36 +1,29 @@
 import os
 import sys
-from dataclasses import dataclass, field
-from typing import Optional
 
-from transformers import HfArgumentParser, set_seed
-from trl import SFTConfig, SFTTrainer
-from utils import create_and_prepare_model
+from transformers import HfArgumentParser
+from trl import SFTConfig
+from utils import ModelArguments, DatasetArguments
 
-from utils import ModelArguments, FinetuneDatasetArguments
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 
-def main(model_args : ModelArguments, data_args : FinetuneDatasetArguments, training_args : SFTConfig):
-    os.environ["CUDA_VISIBLE_DEVICES"] = model_args.cuda_devices
-    # Set seed for reproducibility
+def main(model_args : ModelArguments, data_args : DatasetArguments, training_args : SFTConfig):
+    from transformers import set_seed
+    from trl import SFTTrainer
+    from utils import create_and_prepare_model   # Set seed for reproducibility
+    
     set_seed(training_args.seed)
 
-    # model
-    model, peft_config, tokenizer = create_and_prepare_model(model_args)
-
-    # gradient ckpt
-    model.config.use_cache = not training_args.gradient_checkpointing
-    training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
-    if training_args.gradient_checkpointing:
-        training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
-    
-    # Load training dataset
+    # Load training/evaluation dataset
     import preprocess as pre
-    train_dataset, eval_dataset, label_names = pre.load_datasets(
-        data_args.train_dataset,
-        data_args.eval_dataset,
+    dataset, label_names = pre.load_dataset(
+        data_args.dataset,
         data_args.text_columns,
-        data_args.label_columns
+        data_args.label_columns,
+        test_size = data_args.test_size
     )
+
+    # train_dataset, eval_dataset = dataset['train'], dataset['test']
 
     #training_args.dataset_kwargs = {
     #    "append_concat_token": data_args.append_concat_token,
@@ -45,38 +38,87 @@ def main(model_args : ModelArguments, data_args : FinetuneDatasetArguments, trai
     #    apply_chat_template=model_args.chat_template_format != "none",
     #)
     
-    # trainer
-    trainer = SFTTrainer(
-        model=model,
-        processing_class=tokenizer,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        peft_config=peft_config,
+    # model
+    import finetune as ft
+    model, tokenizer = ft.load_llm(
+        model_args.model_name_or_path,
+        quantized=True
     )
 
-    trainer.accelerator.print(f"{trainer.model}")
-    if hasattr(trainer.model, "print_trainable_parameters"):
-        trainer.model.print_trainable_parameters()
+    import subprocess
+    subprocess.run(["nvidia-smi"])
+    
+    if model_args.use_peft_lora:
+        from peft import get_peft_model, prepare_model_for_kbit_training, LoraConfig
 
-    # train
-    checkpoint = None
-    if training_args.resume_from_checkpoint is not None:
-        checkpoint = training_args.resume_from_checkpoint
-    trainer.train(resume_from_checkpoint=checkpoint)
+        peft_config = LoraConfig(
+            lora_alpha=model_args.lora_alpha,
+            lora_dropout=model_args.lora_dropout,
+            r=model_args.lora_r,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
 
-    # saving final model
-    if trainer.is_fsdp_enabled:
-        trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
-    trainer.save_model()
+        #model = prepare_model_for_kbit_training(model)
+        #model = get_peft_model(model, peft_config)
+    
+    # Enable gradient checkpointing (saves memory)
+    model.config.use_cache = not training_args.gradient_checkpointing
+    # training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
+    if training_args.gradient_checkpointing:
+        training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
+    
+    
+    # model, _, tokenizer = create_and_prepare_model(model_args)
+    
+    history = ft.finetune( # Will save the model to the directory: FINETUNED_LLM_PATH
+        model=model, tokenizer=tokenizer,
+        train_dataset=dataset['train'],
+        lora_config=peft_config, sft_config=training_args
+    )
+
+    # # trainer
+    # trainer = SFTTrainer(
+    #     model=model,
+    #     processing_class=tokenizer,
+    #     args=training_args,
+    #     train_dataset=train_dataset,
+    #     eval_dataset=eval_dataset,
+    #     #peft_config=peft_config,
+    # )
+
+    # # trainer.accelerator.print(f"{trainer.model}")
+    # # if hasattr(trainer.model, "print_trainable_parameters"):
+    # #     trainer.model.print_trainable_parameters()
+
+    # # train
+    # checkpoint = None
+    # if training_args.resume_from_checkpoint is not None:
+    #     checkpoint = training_args.resume_from_checkpoint
+    # trainer.train(resume_from_checkpoint=checkpoint)
+
+    # # saving final model
+    # if trainer.is_fsdp_enabled:
+    #     trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+    # trainer.save_model()
 
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((ModelArguments, FinetuneDatasetArguments, SFTConfig))
+
+    parser = HfArgumentParser((ModelArguments, DatasetArguments, SFTConfig))
+    
+    # We must assign CUDA_VISIBLE_DEVICES here
+    # before transformers and torch are imported
+    args, _ = parser.parse_known_args()
+    if args.cuda_devices:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
+        
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    
+
     main(model_args, data_args, training_args)

@@ -476,7 +476,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
 
     return dataset, label_names
 
-def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : int = 0) -> tuple[Dataset | DatasetDict, dict]:
+def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0) -> tuple[Dataset | DatasetDict, dict]:
     """
     Load and pre-process a supervised text classification dataset.
 
