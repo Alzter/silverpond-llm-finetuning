@@ -6,6 +6,9 @@ import pandas as pd
 import torch
 from pandas import DataFrame
 import warnings
+from matplotlib import pyplot as plt
+import os
+import math
 
 set_seed(42) # Enable deterministic LLM output
 
@@ -21,7 +24,7 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
         output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``.
     
     Returns:
-        result (DataFrame): The training history as a DataFrame. The columns are ["Step", "Training Loss"], where "Step" is the epoch and "Training Loss" is the loss value.
+        result (DataFrame): The training history as a DataFrame. The columns are ["step", "loss"], where "step" is the epoch.
     """
 
     if type(model) is AutoPeftModelForCausalLM:
@@ -49,6 +52,29 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
     except Exception as e:
         warnings.warn(f"Error saving training results for model.\n{str(e)}")
         return None
+
+def save_training_history(history : DataFrame, output_dir : str):
+    """Export training history of a fine-tuned LLM as a CSV and as a plot.
+    
+    Args:
+        history (DataFrame) : LLM fine-tuning history retrieved from finetune()
+        output_dir (str) : Path to store results.
+    """
+    # Save the training history
+    history.to_csv(os.path.join(output_dir, "loss_history.csv"), index=False)
+
+    # Plot the training history and save the plot
+    plt.plot(history.set_index("step")["loss"])
+    plt.xlabel("Epoch")
+    plt.ylabel("Training Loss")
+    
+    loss_max = math.ceil(history['loss'].max())
+    plt.ylim([0, loss_max])
+    
+    plt.title("Fine-tuning Training History")
+    
+    path = os.path.join(output_dir, "loss_history.png")
+    plt.savefig( path, dpi=200, bbox_inches='tight' )
 
 def load_llm(model_name_or_path : str, device_map : str = "cuda:0", quantized : bool = True) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     """

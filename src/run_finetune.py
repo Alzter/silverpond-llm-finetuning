@@ -39,7 +39,6 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     #)
     
     # model
-
     model, peft_config, tokenizer = create_and_prepare_model(model_args)
     
     import finetune as ft
@@ -51,19 +50,19 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     import subprocess
     subprocess.run(["nvidia-smi"])
     
-    if model_args.use_peft_lora:
-        from peft import get_peft_model, prepare_model_for_kbit_training, LoraConfig
+    # if model_args.use_peft_lora:
+    #     from peft import get_peft_model, prepare_model_for_kbit_training, LoraConfig
 
-        peft_config = LoraConfig(
-            lora_alpha=model_args.lora_alpha,
-            lora_dropout=model_args.lora_dropout,
-            r=model_args.lora_r,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
+    #     peft_config = LoraConfig(
+    #         lora_alpha=model_args.lora_alpha,
+    #         lora_dropout=model_args.lora_dropout,
+    #         r=model_args.lora_r,
+    #         bias="none",
+    #         task_type="CAUSAL_LM",
+    #     )
 
-        #model = prepare_model_for_kbit_training(model)
-        #model = get_peft_model(model, peft_config)
+    #     #model = prepare_model_for_kbit_training(model)
+    #     #model = get_peft_model(model, peft_config)
     
     # Enable gradient checkpointing (saves memory)
     model.config.use_cache = not training_args.gradient_checkpointing
@@ -71,11 +70,15 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     if training_args.gradient_checkpointing:
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
     
-    history = ft.finetune( # Will save the model to the directory: FINETUNED_LLM_PATH
+    # Finetune the model
+    history = ft.finetune(
         model=model, tokenizer=tokenizer,
         train_dataset=dataset['train'],
         lora_config=peft_config, sft_config=training_args
     )
+    
+    # Save training history
+    ft.save_training_history(history, training_args.output_dir)
 
     # # trainer
     # trainer = SFTTrainer(
