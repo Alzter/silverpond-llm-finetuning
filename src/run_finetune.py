@@ -42,27 +42,10 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     model, peft_config, tokenizer = create_and_prepare_model(model_args)
     
     import finetune as ft
-    #model, tokenizer = ft.load_llm(
-    #    model_args.model_name_or_path,
-    #    quantized=True
-    #)
 
     import subprocess
     subprocess.run(["nvidia-smi"])
     
-    # if model_args.use_peft_lora:
-    #     from peft import get_peft_model, prepare_model_for_kbit_training, LoraConfig
-
-    #     peft_config = LoraConfig(
-    #         lora_alpha=model_args.lora_alpha,
-    #         lora_dropout=model_args.lora_dropout,
-    #         r=model_args.lora_r,
-    #         bias="none",
-    #         task_type="CAUSAL_LM",
-    #     )
-
-    #     #model = prepare_model_for_kbit_training(model)
-    #     #model = get_peft_model(model, peft_config)
     
     # Enable gradient checkpointing (saves memory)
     model.config.use_cache = not training_args.gradient_checkpointing
@@ -71,23 +54,26 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
     
     # Finetune the model
-    history = ft.finetune(
+    trainer, history = ft.finetune(
         model=model, tokenizer=tokenizer,
         train_dataset=dataset['train'],
-        lora_config=peft_config, sft_config=training_args
+        eval_dataset=dataset['test'],
+        lora_config=peft_config,
+        sft_config=training_args,
+        checkpoint=training_args.resume_from_checkpoint
     )
     
     # Save training history
     ft.save_training_history(history, training_args.output_dir)
 
-    # # trainer
+    # trainer
     # trainer = SFTTrainer(
     #     model=model,
     #     processing_class=tokenizer,
     #     args=training_args,
-    #     train_dataset=train_dataset,
-    #     eval_dataset=eval_dataset,
-    #     #peft_config=peft_config,
+    #     train_dataset=dataset['train'],
+    #     eval_dataset=dataset['test'],
+    #     peft_config=peft_config,
     # )
 
     # # trainer.accelerator.print(f"{trainer.model}")

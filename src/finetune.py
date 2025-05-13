@@ -12,18 +12,30 @@ import math
 
 set_seed(42) # Enable deterministic LLM output
 
-def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_dataset : Dataset, lora_config : LoraConfig, sft_config : SFTConfig, output_dir : str | None = None) -> DataFrame:
+def finetune(
+    model : AutoModelForCausalLM,
+    tokenizer : AutoTokenizer,
+    train_dataset : Dataset,
+    lora_config : LoraConfig,
+    sft_config : SFTConfig,
+    output_dir : str | None = None,
+    eval_dataset : Dataset | None = None,
+    checkpoint : bool | str | None = None
+    ) -> DataFrame:
     """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
         model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
         tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
-        train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset`` before calling this method.
+        train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset``.
         lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
         sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
-        output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``.
-    
+        output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``. Defaults to None.
+        eval_dataset (Dataset, optional): The dataset of training samples to validate the model on. You must pre-process this dataset using ``preprocess_dataset``. Defaults to None.
+        checkpoint (bool | str, optional): If present, training will resume from the model/optimizer/scheduler states loaded here. If a ``str``, local path to a saved checkpoint as saved by a previous instance of Trainer. If a bool and equals ``True``, load the last checkpoint in ``args.output_dir`` as saved by a previous instance of Trainer.
+
     Returns:
+        trainer (SFTTrainer): The SFTTrainer used to fine-tune the LLM.
         result (DataFrame): The training history as a DataFrame. The columns are ["step", "loss"], where "step" is the epoch.
     """
 
@@ -41,17 +53,23 @@ def finetune(model : AutoModelForCausalLM, tokenizer : AutoTokenizer, train_data
         processing_class=tokenizer,
         args=sft_config,
         train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
     )
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=checkpoint)
+
+    if trainer.is_fsdp_enabled:
+        trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+    
     trainer.save_model(output_dir)
 
     try:
         result = pd.DataFrame(trainer.state.log_history)
-        return result
     except Exception as e:
         warnings.warn(f"Error saving training results for model.\n{str(e)}")
-        return None
+        result = None
+    
+    return trainer, result
 
 def save_training_history(history : DataFrame, output_dir : str):
     """Export training history of a fine-tuned LLM as a CSV and as a plot.
