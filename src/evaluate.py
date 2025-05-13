@@ -4,7 +4,7 @@ from typing import Optional
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import os, shutil, re
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
 from matplotlib import pyplot as plt
 import finetune as ft
@@ -46,6 +46,7 @@ class EvaluationConfig:
         temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
         top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
+        out_path (str,optional): Which directory to save the evaluation result by default. Defaults to "results".
         """
     technique_name : str = field(
         metadata = {"help" : 'The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".'}
@@ -54,6 +55,7 @@ class EvaluationConfig:
         metadata = {"help" : 'How many tokens the LLM is allowed to produce to classify each sample.'}
     )
     prompt : Optional[str] = field(
+        default=None,
         metadata = {"help" : 'Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.'}
     )
     prompt_role : Optional[str] = field(
@@ -75,6 +77,10 @@ class EvaluationConfig:
     top_k : Optional[float] = field(
         default=None,
         metadata = {"help" : 'The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False.'}
+    )
+    out_path : Optional[str] = field(
+        default="results",
+        metadata = {"help" : 'Which directory to save the evaluation result by default.'}
     )
     
     @classmethod
@@ -215,7 +221,7 @@ class EvaluationResult:
 
         return disp
 
-    def save(self, output_dir : str = "results") -> None:
+    def save(self, output_dir : str | None = None) -> None:
         """
         Creates human-readable results from raw LLM evaluation data.
 
@@ -234,9 +240,12 @@ class EvaluationResult:
             - Useful if you want to retrieve exact values from the output for future analysis.
 
         Args:
-            output_dir (str, optional): Which folder to save the results into. Defaults to "results".
+            output_dir (str, optional): Which folder to save the results into. Defaults to EvaluationConfig.out_path.
         """
         
+        if not output_dir:
+            output_dir = self.config.out_path
+
         # Make result name file safe
         result_path_name = _sanitize_string(self.config.technique_name)
 
@@ -249,6 +258,10 @@ class EvaluationResult:
 
         # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
         self.save_json( os.path.join(output_dir, "raw_output.json") )
+        
+        print(self.label_names)
+        print(self.labels_pred)
+        print(self.labels_true)
 
         # For each label:
         for label, class_names in self.label_names.items():
@@ -400,9 +413,14 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     """
 
     if len(label_names) == 1:
-        label_names = list(label_names.values())[0]
-        return _get_class_id_from_model_response(model_response, label_names)
-    
+        label = list(label_names.keys())[0] # Get name of first label
+        label_names = list(label_names.values())[0] # Get all label values
+        
+        class_ids = {}
+        class_ids[label] = _get_class_id_from_model_response(model_response, label_names)
+        
+        return class_ids
+
     # If we have more than one label, assume the model's response is in JSON format
 
     # Attempt to find a JSON object within the model's response
