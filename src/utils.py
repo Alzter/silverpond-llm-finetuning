@@ -262,9 +262,6 @@ def create_and_prepare_model(args : ModelArguments):#, training_args):
             else args.lora_target_modules,
         )
 
-        model = prepare_model_for_kbit_training(model)
-        model = get_peft_model(model, peft_config)
-
     special_tokens = None
     chat_template = None
     if args.chat_template_format == "chatml":

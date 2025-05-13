@@ -39,11 +39,14 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     #)
     
     # model
+
+    model, peft_config, tokenizer = create_and_prepare_model(model_args)
+    
     import finetune as ft
-    model, tokenizer = ft.load_llm(
-        model_args.model_name_or_path,
-        quantized=True
-    )
+    #model, tokenizer = ft.load_llm(
+    #    model_args.model_name_or_path,
+    #    quantized=True
+    #)
 
     import subprocess
     subprocess.run(["nvidia-smi"])
@@ -67,9 +70,6 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     # training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
     if training_args.gradient_checkpointing:
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
-    
-    
-    # model, _, tokenizer = create_and_prepare_model(model_args)
     
     history = ft.finetune( # Will save the model to the directory: FINETUNED_LLM_PATH
         model=model, tokenizer=tokenizer,
