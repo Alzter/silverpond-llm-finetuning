@@ -10,6 +10,7 @@ python run_finetune.py \
 	# LLM Configuration
 	` \
 	--model_name_or_path "Qwen/Qwen2.5-7B-Instruct" \
+  --cuda_devices "1" \
 	--use_4bit_quantization True \
 	--bnb_4bit_quant_type "nf4" \
 	--bnb_4bit_compute_dtype "float16" \
