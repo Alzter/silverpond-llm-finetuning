@@ -1,9 +1,10 @@
 import dataclasses
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
+from typing import Optional
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import os, shutil, re
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
 from matplotlib import pyplot as plt
 import finetune as ft
@@ -11,6 +12,7 @@ import pandas as pd
 import numpy as np
 import time, json
 from datetime import timedelta
+import warnings
 
 def _sanitize_string(string) -> str:
     """Make a given string safe for use within a file path.
@@ -28,24 +30,58 @@ def _sanitize_string(string) -> str:
 @dataclass
 class EvaluationConfig:
     """
-    Defines how LLMs should be instructed to classify each text sample in a classification dataset.
-    You can specify different configurations for different prompting techniques.
-
-    NOTE: For each sample in the dataset, the LLM must output the *name* of the predicted class in its response.
+    Defines what instructions and hyperparameters to give an LLM to classify each sample in a text classification dataset.
+    You can specify different configurations for different prompting and generation techniques.
 
     Args:
-        name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
+        technique_name (str): The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".
         max_tokens (int): How many tokens the LLM is allowed to produce to classify each sample.
                           If you are planning on having your LLM output *just* the class label,
                           you can set this value to 1. The LLM will only return the first few
                           letters of the class label, but this is usually enough to identify
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
-        prompt (str, optional): Optional system prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
-    """
-    name : str
-    max_tokens : int
-    prompt : str | None = None
-    # extractor_method : func
+        prompt (str, optional): Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
+        prompt_role (str, optional): What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.
+        do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
+        temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
+        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
+        out_path (str,optional): Which directory to save the evaluation result by default. Defaults to "results".
+        """
+    technique_name : str = field(
+        metadata = {"help" : 'The name of your classification technique, e.g., "Chain-of-Thought 2-shot" or "Zero-shot" or "Fine-tuned".'}
+    )
+    max_tokens : int = field(
+        metadata = {"help" : 'How many tokens the LLM is allowed to produce to classify each sample.'}
+    )
+    prompt : Optional[str] = field(
+        default=None,
+        metadata = {"help" : 'Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.'}
+    )
+    prompt_role : Optional[str] = field(
+        default='system',
+        metadata = {"help" : 'What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.'}
+    )
+    do_sample : Optional[bool] = field(
+        default=False,
+        metadata = {"help" : 'If False, enables deterministic generation. Defaults to False.'}
+    )
+    temperature : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False.'}
+    )
+    top_p : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False.'}
+    )
+    top_k : Optional[float] = field(
+        default=None,
+        metadata = {"help" : 'The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False.'}
+    )
+    out_path : Optional[str] = field(
+        default="results",
+        metadata = {"help" : 'Which directory to save the evaluation result by default.'}
+    )
     
     @classmethod
     def from_dict(cls, data_dict: dict):
@@ -177,7 +213,7 @@ class EvaluationResult:
             display_labels=label_names_truncated
             )
             
-        disp.ax_.set_title( f"{label_name} ({self.config.name})" )
+        disp.ax_.set_title( f"{label_name} ({self.config.technique_name})" )
 
         if not include_values:
             disp.ax_.set_xticks([])
@@ -185,7 +221,7 @@ class EvaluationResult:
 
         return disp
 
-    def save(self, output_dir : str = "results") -> None:
+    def save(self, output_dir : str | None = None) -> None:
         """
         Creates human-readable results from raw LLM evaluation data.
 
@@ -204,11 +240,14 @@ class EvaluationResult:
             - Useful if you want to retrieve exact values from the output for future analysis.
 
         Args:
-            output_dir (str, optional): Which folder to save the results into. Defaults to "results".
+            output_dir (str, optional): Which folder to save the results into. Defaults to EvaluationConfig.out_path.
         """
         
+        if not output_dir:
+            output_dir = self.config.out_path
+
         # Make result name file safe
-        result_path_name = _sanitize_string(self.config.name)
+        result_path_name = _sanitize_string(self.config.technique_name)
 
         if not output_dir:
             output_dir = result_path_name
@@ -219,6 +258,10 @@ class EvaluationResult:
 
         # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
         self.save_json( os.path.join(output_dir, "raw_output.json") )
+        
+        print(self.label_names)
+        print(self.labels_pred)
+        print(self.labels_true)
 
         # For each label:
         for label, class_names in self.label_names.items():
@@ -370,17 +413,25 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     """
 
     if len(label_names) == 1:
-        label_names = list(label_names.values())[0]
-        return _get_class_id_from_model_response(model_response, label_names)
-    
+        label = list(label_names.keys())[0] # Get name of first label
+        label_names = list(label_names.values())[0] # Get all label values
+        
+        class_ids = {}
+        class_ids[label] = _get_class_id_from_model_response(model_response, label_names)
+        
+        return class_ids
+
     # If we have more than one label, assume the model's response is in JSON format
+
+    # Attempt to find a JSON object within the model's response
+    match = re.search(r"{[^}]*}", model_response)
+    if match: model_response = match.group()
 
     # Attempt to parse the model's response as a dictionary of predicted class labels
     try:
         response_dict = json.loads(model_response)
     except Exception:
-        
-        print(f"Could not extract JSON from response: {model_response}")
+        warnings.warn(f"Could not extract JSON from response: {model_response}")
         # If the model's response is not valid JSON, simply return each label as unknown
         class_ids = {}
         for label, class_names in label_names.items():
@@ -438,7 +489,7 @@ def evaluate(
         label_names (dict): List of all unique class names for each label.
                             E.g., ``label_names["fruit"] = ["Apple", "Banana", "Orange"]``.
         eval_dataset (Dataset): The evaluation dataset. Must be preprocessed (see ``finetune.preprocess_dataset()``).
-        eval_config (EvaluationConfig): Controls what instructions to give to the LLM to classify each sample.
+        eval_config (EvaluationConfig): Defines what instructions and parameters to give to the LLM to classify each sample.
 
     Returns:
         EvaluationResult: Raw evaluation data, including all samples, predicted/actual labels, and the LLM's response for each sample.
@@ -464,7 +515,7 @@ def evaluate(
         
         # Generate a classification prompt for the sample
         prompt = [
-            {"role":"system", "content":eval_config.prompt},
+            {"role":eval_config.prompt_role, "content":eval_config.prompt},
             {"role":"user", "content":text}
         ]
         # Remove the system prompt from the chat template if none was specified
@@ -474,7 +525,9 @@ def evaluate(
         # Get the LLM to generate an answer
         response = ft.generate(
                             prompt=prompt, model=model, tokenizer=tokenizer,
-                            max_new_tokens = eval_config.max_tokens
+                            max_new_tokens = eval_config.max_tokens,
+                            do_sample=eval_config.do_sample, temperature=eval_config.temperature,
+                            top_p=eval_config.top_p, top_k=eval_config.top_k
                             )
         
         # Extract the class ID(s) from the LLM's answer if one exists
