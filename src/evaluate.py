@@ -209,6 +209,7 @@ class EvaluationResult:
         disp = ConfusionMatrixDisplay.from_predictions(
             y_true=y_true,y_pred=y_pred,labels=label_names,
             include_values=include_values, cmap=plt.cm.Blues,
+            values_format = '.1f',
             xticks_rotation='vertical',
             normalize="true",
             display_labels=label_names_truncated
