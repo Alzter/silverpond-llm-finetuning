@@ -288,6 +288,78 @@ class EvaluationResult:
 
         plt.show()
 
+def create_prompt(
+    data_sample_name : str,
+    label_names : dict[str, list[str]],
+    chain_of_thought : bool = False,
+    examples : str | None = None
+    ) -> str:
+    """
+    Generate a text classification prompt using a given set of labels.
+    This prompt can be used by a pre-trained language model to perform text classification.
+
+    The prompt instructs the to answer in JSON format if there is more than one class to classify.
+    You can optionally specify few-shot examples for the model to use and/or instruct the model to use Chain-of-Thought reasoning.
+
+    Args:
+        data_sample_name (str): A name to describe your data samples, e.g., "power outage report" or "serious injury report". Must be singular and in lowercase.
+        label_names (dict[str, list]): A dict containing a list of label names for each class. The format is ``( class_name (str) : labels (list[str]) )``.
+                                        If there is more than one class, the LLM will be instructed to provide an answer in JSON format.
+        chain_of_thought (bool, optional): If true, instructs the LLM to answer with Chain-of-Thought reasoning rather than directly. Defaults to False.
+        examples (str, optional): Few-shot examples to provide the LLM before classification. These examples are placed at the end of the prompt. Defaults to None.
+
+    Returns:
+        prompt (str): The text classification prompt.
+
+    """
+    
+    prompt = f"You are an expert at classifying {data_sample_name}s"
+    if len(label_names) == 1:
+
+        label_names = label_names[list(label_names.keys())[0]]
+        
+        prompt += " into the following categories:\n\nCATEGORIES:\n"
+        for label in label_names:
+            prompt += f"- {label}\n"
+
+        prompt += f"\nRead the following {data_sample_name} then answer with the name of the category which suits it best."
+
+        if not chain_of_thought:
+            prompt += f'\nAnswer with ONLY the name of the category, i.e., "{label_names[0]}".'
+        else:
+            prompt += f'\nWork out your answer step by step, then present your final answer using the name of the category, i.e., "{label_names[0]}".'
+
+    else:
+        units = ['','one','two','three','four','five','six','seven','eight','nine']
+        
+        prompt +=".\n\nYou are given two classification tasks."
+        prompt +=f"\nYou should output the result as {units[len(label_names.keys())]} json fields as " + "{"
+        
+        for name in label_names.keys():
+            prompt += f"{name} : {ev._sanitize_string(name)}_label, "
+        
+        prompt = prompt[:-2]
+        prompt += "}\n"
+
+        for name, items in label_names.items():
+            prompt += f"\nFor {name}, given the {data_sample_name}, you are asked to classify it as one of the labels in the list "
+            prompt += str(items)
+            prompt += f" and change {ev._sanitize_string(name)}_label to the correct label in the list."
+
+        if not chain_of_thought:
+            prompt += f"\n\nOutput the {units[len(label_names.keys())]} json fields only and absolutely nothing else."
+        else:
+            prompt += f"\n\nWork out your answer step by step, then present your final answer using {units[len(label_names.keys())]} json fields."
+
+    # Few-shot examples
+    if examples:
+        prompt += "\n\n"
+        prompt += examples
+    else:
+        prompt += "\nNow it is your turn." if not chain_of_thought else "\nLet's think step by step."
+    
+    return prompt
+
 def _get_class_id_from_model_response(model_response : str, label_names : list) -> int:
     """
     After getting an LLM to perform text classification,
