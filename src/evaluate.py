@@ -229,7 +229,7 @@ class EvaluationResult:
                      pred_class : str,
                      n : int = 1) -> DataFrame:
         """
-        Helper function for ``generate_few_shot_examples()``.
+        Helper function for ``get_few_shot_examples()``.
         Given a DataFrame of incorrect text classification LLM responses,
         return ``n`` rows from the label ``label_name`` where the
         true label was ``true_class`` and the predicted label was ``pred_class``.
@@ -255,7 +255,7 @@ class EvaluationResult:
         
         return matches
     
-    def generate_few_shot_examples(self,
+    def get_few_shot_examples(self,
         samples_per_class : int = 1,
         samples_per_true_label : int = 1,
         samples_per_pred_label : int = 1) -> str:
