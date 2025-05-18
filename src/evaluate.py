@@ -9,6 +9,7 @@ from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confu
 from matplotlib import pyplot as plt
 import finetune as ft
 import pandas as pd
+from pandas import DataFrame
 import numpy as np
 import time, json
 from datetime import timedelta
@@ -358,6 +359,114 @@ def create_prompt(
     else:
         prompt += "\nNow it is your turn." if not chain_of_thought else "\nLet's think step by step."
     
+    return prompt
+
+def _get_few_shot_examples(incorrect_answers : DataFrame,
+                 label_name : str,
+                 true_class : str,
+                 pred_class : str,
+                 n : int = 1) -> DataFrame:
+    """
+    Helper function for ``generate_few_shot_examples()``.
+    Given a DataFrame of incorrect text classification LLM responses,
+    return ``n`` rows from the label ``label_name`` where the
+    true label was ``true_class`` and the predicted label was ``pred_class``.
+
+    Args:
+        incorrect_answers (DataFrame): DataFrame containing every incorrect classification from the LLM for each class.
+        label_name (str): Which label to use.
+        true_class (str): Only retrieve rows with this as the true label.
+        pred_class (str): Only retrieve rows with this as the predicted label.
+        n (int): Number of rows to return.
+
+    Returns:
+        matches (DataFrame): Subset of rows from ``incorrect_answers`` which match the conditions.
+    """
+    true_class_column = "True " + label_name
+    pred_class_column = "Predicted " + label_name
+
+    inc = incorrect_answers # Shorthand
+
+    matches = inc[(inc[true_class_column] == true_class) & (inc[pred_class_column] == pred_class)]
+
+    matches = matches.sample(n=n)
+    
+    return matches
+
+def generate_few_shot_examples(
+    incorrect_answers_csv : str,
+    examples_per_label : int = 1,
+    examples_per_class : int = 1,
+    examples_per_sample : int = 1) -> str:
+    """
+    Generate few-shot examples for a supervised text classification dataset
+    after an LLM has already attempted to predict each sample using a zero-shot prompt.
+
+    Prioritises examples based on the classes that the LLM failed to classify the most,
+    resulting in a series examples that are optimised to cover the LLM's weaknesses.
+
+    Preconditions:
+        You must have evaluated an LLM on a supervised text classification dataset
+        using ``run_eval.py`` using a zero-shot prompt. This will store a CSV file
+        of all the LLM's incorrect answers for the dataset at
+        ``RESULTS_PATH/incorrect_answers.csv``.
+
+    Args:
+        incorrect_answers_csv (str): Path to the file containing every incorrect classification from the LLM for each class.
+        examples_per_label (int): How many examples to generate for each class.
+        examples_per_class (int): For each label of each class, how many examples to generate.
+        examples_per_sample (int): For each sample of each label, how many examples to generate.
+
+    Returns:
+        examples (str): Few-shot examples optimised to cover the LLM's weaknesses.
+    """
+
+    incorrect_answers = pd.read_csv(incorrect_answers_csv, index_col=0)
+    
+    prompt = ""
+    
+    true_label_column_names = [i for i in incorrect_answers.columns.tolist() if "True" in i]
+    
+    # Get the column names for all classes in the incorrect answer dataframe
+    true_label_column_names = [i for i in incorrect_answers.columns.tolist() if "True" in i]
+    label_column_names = [i.lstrip("True").strip() for i in true_label_column_names]
+    
+    # For each class label:
+    for label in label_column_names:
+        #print('---------------------------')
+        #print(label)
+        #print('\n')
+        true_label_column = "True " + label
+        pred_label_column = "Predicted " + label
+
+        incorrect = incorrect_answers[incorrect_answers[pred_label_column] != incorrect_answers[true_label_column]]
+    
+        # Get the most incorrectly predicted labels
+        incorrect_labels = incorrect[true_label_column].value_counts()[:examples_per_label]
+
+        # For each label name that was incorrectly predicted
+        for true_label in incorrect_labels.keys().tolist():
+            
+            #print(f"True Label: {true_label}")
+            
+            # Get all answers which have that label as the true label
+            pred_labels = incorrect[ incorrect[true_label_column] == true_label]
+            pred_labels = pred_labels[pred_label_column].value_counts().keys()
+            pred_labels = pred_labels[:examples_per_class]
+            
+            for pred_label in pred_labels:
+                #print(f"Pred Label: {pred_label}")
+                
+                examples = _get_few_shot_examples(incorrect, label, true_label, pred_label, n=examples_per_sample)
+
+                for example in examples.to_dict(orient='records'):
+                    prompt += "Question:\n"
+                    prompt += example["Text"]
+                    prompt += "\n\nAnswer:\n"
+                    prompt += example[true_label_column]
+                    prompt += "\n\n"
+                    
+    prompt += "Question:\n"
     return prompt
 
 def _get_class_id_from_model_response(model_response : str, label_names : list) -> int:
