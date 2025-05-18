@@ -34,14 +34,35 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
 
 if __name__ == "__main__":
     parser = HfArgumentParser((EvaluationConfig, ModelArguments, DatasetArguments))
+    
+    # If we pass only one argument to the script and it's
+    # the path to a json file, let's parse it to get our arguments.
 
-    # We must assign CUDA_VISIBLE_DEVICES here
-    # before transformers and torch are imported
-    args, _ = parser.parse_known_args()
-    if args.cuda_devices:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
+    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
 
-    eval_config, model_args, data_args = parser.parse_args_into_dataclasses()
+        # We must assign CUDA_VISIBLE_DEVICES here
+        # before transformers and torch are imported
+        file = os.path.abspath(sys.argv[1])
+        import json
+        with open(file) as f:
+            data = json.load(f)
+            f.close()
+        if data.get("cuda_devices"):
+            os.environ["CUDA_VISIBLE_DEVICES"] = data["cuda_devices"]
+        del data
+
+        args = parser.parse_json_file(json_file=file)
+    
+    else:
+        # We must assign CUDA_VISIBLE_DEVICES here
+        # before transformers and torch are imported
+        args, _ = parser.parse_known_args()
+        if args.cuda_devices:
+            os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
+
+        args = parser.parse_args_into_dataclasses()
+
+    eval_config, model_args, data_args = args
 
     main(eval_config, model_args, data_args)
 
