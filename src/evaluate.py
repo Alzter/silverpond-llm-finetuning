@@ -336,7 +336,7 @@ def create_prompt(
         prompt +=f"\nYou should output the result as {units[len(label_names.keys())]} json fields as " + "{"
         
         for name in label_names.keys():
-            prompt += f"{name} : {ev._sanitize_string(name)}_label, "
+            prompt += f"{name} : {_sanitize_string(name)}_label, "
         
         prompt = prompt[:-2]
         prompt += "}\n"
@@ -344,7 +344,7 @@ def create_prompt(
         for name, items in label_names.items():
             prompt += f"\nFor {name}, given the {data_sample_name}, you are asked to classify it as one of the labels in the list "
             prompt += str(items)
-            prompt += f" and change {ev._sanitize_string(name)}_label to the correct label in the list."
+            prompt += f" and change {_sanitize_string(name)}_label to the correct label in the list."
 
         if not chain_of_thought:
             prompt += f"\n\nOutput the {units[len(label_names.keys())]} json fields only and absolutely nothing else."
