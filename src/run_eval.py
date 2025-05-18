@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import os
+import sys
+
 from evaluate import EvaluationConfig
 from utils import ModelArguments, DatasetArguments, create_and_prepare_model
 from transformers import HfArgumentParser
