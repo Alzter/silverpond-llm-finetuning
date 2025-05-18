@@ -89,6 +89,13 @@ class EvaluationConfig:
         field_names = set(f.name for f in dataclasses.fields(cls))
         return cls(**{k: v for k, v in data_dict.items() if k in field_names})
 
+    @classmethod
+    def from_json(cls, json_file : str):
+        with open(json_file) as f:
+            data = json.load(f)
+            f.close()
+        return cls.from_dict(data) 
+
     def to_dict(self): return asdict(self)
     def save_json(self, path : str):
         data = self.to_dict()
@@ -126,6 +133,13 @@ class EvaluationResult:
         result.config = EvaluationConfig.from_dict(result.config)
         return result
     
+    @classmethod
+    def from_json(cls, json_file : str):
+        with open(json_file) as f:
+            data = json.load(f)
+            f.close()
+        return cls.from_dict(data)
+
     def to_dict(self): return asdict(self)
     def save_json(self, path : str):
         data = self.to_dict()
