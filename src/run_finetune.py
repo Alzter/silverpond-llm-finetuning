@@ -20,7 +20,8 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
         data_args.dataset,
         data_args.text_columns,
         data_args.label_columns,
-        test_size = data_args.test_size
+        test_size = data_args.test_size,
+        ratio = data_args.ratio
     )
 
     # train_dataset, eval_dataset = dataset['train'], dataset['test']

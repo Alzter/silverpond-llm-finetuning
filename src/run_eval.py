@@ -15,8 +15,9 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
         data_args.dataset,
         data_args.text_columns,
         data_args.label_columns,
-        test_size=0
-    ) 
+        test_size=0,
+        ratio=data_args.ratio
+    )
 
     # Load model
     model, peft_config, tokenizer = create_and_prepare_model(model_args)
