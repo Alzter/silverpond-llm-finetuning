@@ -1,5 +1,5 @@
 from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, set_seed
+from transformers import set_seed
 from peft import LoraConfig, PeftConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
 from trl import SFTConfig, SFTTrainer
 import pandas as pd
@@ -9,12 +9,12 @@ import warnings
 from matplotlib import pyplot as plt
 import os
 import math
+from utils import LocalPLM
 
 set_seed(42) # Enable deterministic LLM output
 
 def finetune(
-    model : AutoModelForCausalLM,
-    tokenizer : AutoTokenizer,
+    model : LocalPLM,
     train_dataset : Dataset,
     lora_config : LoraConfig,
     sft_config : SFTConfig,
@@ -25,8 +25,7 @@ def finetune(
     """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
-        model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``AutoModelForCausalLM.from_pretrained(model_name)`` to instantiate.
-        tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+        model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``LocalPLM(LocalModelArguments)`` to instantiate.
         train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset``.
         lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
         sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
@@ -38,19 +37,19 @@ def finetune(
         trainer (SFTTrainer): The SFTTrainer used to fine-tune the LLM.
         result (DataFrame): The training history as a DataFrame. The columns are ["step", "loss"], where "step" is the epoch.
     """
-
-    if type(model) is AutoPeftModelForCausalLM:
+    
+    if type(model.model) is AutoPeftModelForCausalLM:
         raise Exception("Cannot finetune model because it is already finetuned. Merge the adapters into base model to train further.")
     
     if output_dir is None:
         output_dir = sft_config.output_dir
 
-    model = prepare_model_for_kbit_training(model)
-    model = get_peft_model(model, lora_config)
+    model.model = prepare_model_for_kbit_training(model.model)
+    model.model = get_peft_model(model.model, lora_config)
 
     trainer = SFTTrainer(
-        model=model,
-        processing_class=tokenizer,
+        model=model.model,
+        processing_class=model.tokenizer,
         args=sft_config,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

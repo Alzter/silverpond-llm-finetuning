@@ -1,23 +1,27 @@
 import os
+import warnings
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Optional
 from enum import Enum
-
 import packaging.version
+
+import pandas as pd
+from pandas import DataFrame
+from matplotlib import pyplot as plt
+
 import torch
 import transformers
-from datasets import DatasetDict, load_dataset, load_from_disk
-from datasets.builder import DatasetGenerationError
+from datasets import Dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     BitsAndBytesConfig,
 )
+from peft import LoraConfig, AutoPeftModelForCausalLM, prepare_model_for_kbit_training, get_peft_model
+from trl import SFTConfig, SFTTrainer
 
-from abc import ABC, abstractmethod
-
-from dataclasses import dataclass, field
-from typing import Optional
-
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from litellm.utils import get_llm_provider
 
 DEFAULT_CHATML_CHAT_TEMPLATE = "{% for message in messages %}\n{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% if loop.last and add_generation_prompt %}{{'<|im_start|>assistant\n' }}{% endif %}{% endfor %}"
 DEFAULT_ZEPHYR_CHAT_TEMPLATE = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
@@ -152,6 +156,10 @@ class PretrainedLM(ABC):
 
 class LocalPLM(PretrainedLM):
     def __init__(self, args : LocalModelArguments):
+
+        from transformers import set_seed
+        set_seed(42) # Enable deterministic LLM output
+
         # if args.use_unsloth:
         #     from unsloth import FastLanguageModel
         bnb_config = None
@@ -311,7 +319,7 @@ class LocalPLM(PretrainedLM):
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
-            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
+            temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 0.
             top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
             kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
         
@@ -351,10 +359,88 @@ class LocalPLM(PretrainedLM):
         # Decode the tokens back into text
         output = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
         return output
+    
+    def finetune(self,
+        train_dataset : Dataset,
+        lora_config : LoraConfig,
+        sft_config : SFTConfig,
+        output_dir : str | None = None,
+        eval_dataset : Dataset | None = None,
+        checkpoint : bool | str | None = None
+        ) -> tuple[SFTTrainer, DataFrame]:
+        """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
+    
+        Args:
+            model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``LocalPLM(LocalModelArguments)`` to instantiate.
+            train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset``.
+            lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
+            sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
+            output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``. Defaults to None.
+            eval_dataset (Dataset, optional): The dataset of training samples to validate the model on. You must pre-process this dataset using ``preprocess_dataset``. Defaults to None.
+            checkpoint (bool | str, optional): If present, training will resume from the model/optimizer/scheduler states loaded here. If a ``str``, local path to a saved checkpoint as saved by a previous instance of Trainer. If a bool and equals ``True``, load the last checkpoint in ``args.output_dir`` as saved by a previous instance of Trainer.
+    
+        Returns:
+            trainer (SFTTrainer): The SFTTrainer used to fine-tune the LLM.
+            result (DataFrame): The training history as a DataFrame. The columns are ["step", "loss"], where "step" is the epoch.
+        """
+        
+        if type(self.model) is AutoPeftModelForCausalLM:
+            raise Exception("Cannot finetune model because it is already finetuned. Merge the adapters into base model to train further.")
+        
+        if output_dir is None:
+            output_dir = sft_config.output_dir
+    
+        self.model = prepare_model_for_kbit_training(self.model)
+        self.model = get_peft_model(self.model, lora_config)
+    
+        trainer = SFTTrainer(
+            model=self.model,
+            processing_class=self.tokenizer,
+            args=sft_config,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+        )
+    
+        trainer.train(resume_from_checkpoint=checkpoint)
+    
+        if trainer.is_fsdp_enabled:
+            trainer.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")
+        
+        trainer.save_model(output_dir)
+    
+        try:
+            result = pd.DataFrame(trainer.state.log_history)
+        except Exception as e:
+            warnings.warn(f"Error saving training results for model.\n{str(e)}")
+            result = None
+        
+        return trainer, result
+    
+    def save_training_history(self, history : DataFrame, output_dir : str):
+        """Export training history of a fine-tuned LLM as a CSV and as a plot.
+        
+        Args:
+            history (DataFrame) : LLM fine-tuning history retrieved from finetune()
+            output_dir (str) : Path to store results.
+        """
+        # Save the training history
+        history.to_csv(os.path.join(output_dir, "loss_history.csv"), index=False)
+    
+        # Plot the training history and save the plot
+        plt.plot(history.set_index("step")["loss"])
+        plt.xlabel("Epoch")
+        plt.ylabel("Training Loss")
+        
+        loss_max = math.ceil(history['loss'].max())
+        plt.ylim([0, loss_max])
+        
+        plt.title("Fine-tuning Training History")
+        
+        path = os.path.join(output_dir, "loss_history.png")
+        plt.savefig( path, dpi=200, bbox_inches='tight' )
 
 class CloudLM(PretrainedLM):
     def __init__(self, args : CloudModelArguments):
-        from litellm.utils import get_llm_provider
         
         # Raise an exception if model_name is
         # not a model that LiteLLM supports
@@ -386,7 +472,7 @@ class CloudLM(PretrainedLM):
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
-            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 1.
+            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
             top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
             kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
         
@@ -404,7 +490,12 @@ class CloudLM(PretrainedLM):
             **kwargs
         )
         
-        response_text = response.choices[0].message.content.strip()
+        try:
+            response_text = response.choices[0].message.content
+        except Exception as e:
+            raise BadRequestError(f"Error generating model response. Traceback: {str(e)}")
+        
+        response_text = response_text.strip()
 
         return response_text
 
@@ -508,123 +599,123 @@ class ChatmlSpecialTokens(str, Enum):
 #     return train_data, valid_data
 
 
-def create_and_prepare_model(args : LocalModelArguments):#, training_args):
-    # if args.use_unsloth:
-    #     from unsloth import FastLanguageModel
-    bnb_config = None
-    quant_storage_dtype = None
+# def create_and_prepare_model(args : LocalModelArguments):#, training_args):
+#     # if args.use_unsloth:
+#     #     from unsloth import FastLanguageModel
+#     bnb_config = None
+#     quant_storage_dtype = None
 
-    # if (
-    #     torch.distributed.is_available()
-    #     and torch.distributed.is_initialized()
-    #     and torch.distributed.get_world_size() > 1
-    #     and args.use_unsloth
-    # ):
-    #     raise NotImplementedError("Unsloth is not supported in distributed training")
+#     # if (
+#     #     torch.distributed.is_available()
+#     #     and torch.distributed.is_initialized()
+#     #     and torch.distributed.get_world_size() > 1
+#     #     and args.use_unsloth
+#     # ):
+#     #     raise NotImplementedError("Unsloth is not supported in distributed training")
 
-    if args.use_4bit_quantization:
-        compute_dtype = getattr(torch, args.bnb_4bit_compute_dtype)
-        quant_storage_dtype = getattr(torch, args.bnb_4bit_quant_storage_dtype)
+#     if args.use_4bit_quantization:
+#         compute_dtype = getattr(torch, args.bnb_4bit_compute_dtype)
+#         quant_storage_dtype = getattr(torch, args.bnb_4bit_quant_storage_dtype)
 
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=args.use_4bit_quantization,
-            bnb_4bit_quant_type=args.bnb_4bit_quant_type,
-            bnb_4bit_compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=args.use_nested_quant,
-            bnb_4bit_quant_storage=quant_storage_dtype,
-        )
+#         bnb_config = BitsAndBytesConfig(
+#             load_in_4bit=args.use_4bit_quantization,
+#             bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+#             bnb_4bit_compute_dtype=compute_dtype,
+#             bnb_4bit_use_double_quant=args.use_nested_quant,
+#             bnb_4bit_quant_storage=quant_storage_dtype,
+#         )
 
-        if compute_dtype == torch.float16 and args.use_4bit_quantization:
-            major, _ = torch.cuda.get_device_capability()
-            if major >= 8:
-                print("=" * 80)
-                print("Your GPU supports bfloat16, you can accelerate training with the argument --bf16")
-                print("=" * 80)
-        elif args.use_8bit_quantization:
-            bnb_config = BitsAndBytesConfig(load_in_8bit=args.use_8bit_quantization)
+#         if compute_dtype == torch.float16 and args.use_4bit_quantization:
+#             major, _ = torch.cuda.get_device_capability()
+#             if major >= 8:
+#                 print("=" * 80)
+#                 print("Your GPU supports bfloat16, you can accelerate training with the argument --bf16")
+#                 print("=" * 80)
+#         elif args.use_8bit_quantization:
+#             bnb_config = BitsAndBytesConfig(load_in_8bit=args.use_8bit_quantization)
 
-    # if args.use_unsloth:
-    #     # Load model
-    #     model, _ = FastLanguageModel.from_pretrained(
-    #         model_name=args.model_name_or_path,
-    #         max_seq_length=training_args.max_seq_length,
-    #         dtype=None,
-    #         load_in_4bit=args.use_4bit_quantization,
-    #     )
-    #else:
-    if True:
-        torch_dtype = (
-            quant_storage_dtype if quant_storage_dtype and quant_storage_dtype.is_floating_point else torch.float32
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            quantization_config=bnb_config,
-            trust_remote_code=True,
-            attn_implementation=args.attn_implementation,#"flash_attention_2" if args.use_flash_attn else "eager",
-            torch_dtype=torch_dtype,
-        )
+#     # if args.use_unsloth:
+#     #     # Load model
+#     #     model, _ = FastLanguageModel.from_pretrained(
+#     #         model_name=args.model_name_or_path,
+#     #         max_seq_length=training_args.max_seq_length,
+#     #         dtype=None,
+#     #         load_in_4bit=args.use_4bit_quantization,
+#     #     )
+#     #else:
+#     if True:
+#         torch_dtype = (
+#             quant_storage_dtype if quant_storage_dtype and quant_storage_dtype.is_floating_point else torch.float32
+#         )
+#         model = AutoModelForCausalLM.from_pretrained(
+#             args.model_name_or_path,
+#             quantization_config=bnb_config,
+#             trust_remote_code=True,
+#             attn_implementation=args.attn_implementation,#"flash_attention_2" if args.use_flash_attn else "eager",
+#             torch_dtype=torch_dtype,
+#         )
 
-    peft_config = None
-    chat_template = None
-    if args.use_peft_lora:# and not args.use_unsloth:
-        peft_config = LoraConfig(
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            r=args.lora_r,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=args.lora_target_modules.split(",")
-            if args.lora_target_modules is not None and args.lora_target_modules != "all-linear"
-            else args.lora_target_modules,
-        )
+#     peft_config = None
+#     chat_template = None
+#     if args.use_peft_lora:# and not args.use_unsloth:
+#         peft_config = LoraConfig(
+#             lora_alpha=args.lora_alpha,
+#             lora_dropout=args.lora_dropout,
+#             r=args.lora_r,
+#             bias="none",
+#             task_type="CAUSAL_LM",
+#             target_modules=args.lora_target_modules.split(",")
+#             if args.lora_target_modules is not None and args.lora_target_modules != "all-linear"
+#             else args.lora_target_modules,
+#         )
 
-    special_tokens = None
-    chat_template = None
-    if args.chat_template_format == "chatml":
-        special_tokens = ChatmlSpecialTokens
-        chat_template = DEFAULT_CHATML_CHAT_TEMPLATE
-    elif args.chat_template_format == "zephyr":
-        special_tokens = ZephyrSpecialTokens
-        chat_template = DEFAULT_ZEPHYR_CHAT_TEMPLATE
+#     special_tokens = None
+#     chat_template = None
+#     if args.chat_template_format == "chatml":
+#         special_tokens = ChatmlSpecialTokens
+#         chat_template = DEFAULT_CHATML_CHAT_TEMPLATE
+#     elif args.chat_template_format == "zephyr":
+#         special_tokens = ZephyrSpecialTokens
+#         chat_template = DEFAULT_ZEPHYR_CHAT_TEMPLATE
 
-    if special_tokens is not None:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.model_name_or_path,
-            pad_token=special_tokens.pad_token.value,
-            bos_token=special_tokens.bos_token.value,
-            eos_token=special_tokens.eos_token.value,
-            additional_special_tokens=special_tokens.list(),
-            trust_remote_code=True,
-        )
-        tokenizer.chat_template = chat_template
+#     if special_tokens is not None:
+#         tokenizer = AutoTokenizer.from_pretrained(
+#             args.model_name_or_path,
+#             pad_token=special_tokens.pad_token.value,
+#             bos_token=special_tokens.bos_token.value,
+#             eos_token=special_tokens.eos_token.value,
+#             additional_special_tokens=special_tokens.list(),
+#             trust_remote_code=True,
+#         )
+#         tokenizer.chat_template = chat_template
 
-        # make embedding resizing configurable?
-        # Transformers 4.46.0+ defaults uses mean_resizing by default, which fails with QLoRA + FSDP because the
-        # embedding could be on meta device, therefore, we set mean_resizing=False in that case (i.e. the status quo
-        # ante). See https://github.com/huggingface/accelerate/issues/1620.
-        uses_transformers_4_46 = packaging.version.parse(transformers.__version__) >= packaging.version.parse("4.46.0")
-        uses_fsdp = os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
-        if (bnb_config is not None) and uses_fsdp and uses_transformers_4_46:
-            model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8, mean_resizing=False)
-        else:
-            model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8)
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=True)
-        tokenizer.pad_token = tokenizer.eos_token
+#         # make embedding resizing configurable?
+#         # Transformers 4.46.0+ defaults uses mean_resizing by default, which fails with QLoRA + FSDP because the
+#         # embedding could be on meta device, therefore, we set mean_resizing=False in that case (i.e. the status quo
+#         # ante). See https://github.com/huggingface/accelerate/issues/1620.
+#         uses_transformers_4_46 = packaging.version.parse(transformers.__version__) >= packaging.version.parse("4.46.0")
+#         uses_fsdp = os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+#         if (bnb_config is not None) and uses_fsdp and uses_transformers_4_46:
+#             model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8, mean_resizing=False)
+#         else:
+#             model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8)
+#     else:
+#         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+#         tokenizer.pad_token = tokenizer.eos_token
 
-    # if args.use_unsloth:
-    #     # Do model patching and add fast LoRA weights
-    #     model = FastLanguageModel.get_peft_model(
-    #         model,
-    #         lora_alpha=args.lora_alpha,
-    #         lora_dropout=args.lora_dropout,
-    #         r=args.lora_r,
-    #         target_modules=args.lora_target_modules.split(",")
-    #         if args.lora_target_modules != "all-linear"
-    #         else args.lora_target_modules,
-    #         use_gradient_checkpointing=training_args.gradient_checkpointing,
-    #         random_state=training_args.seed,
-    #         max_seq_length=training_args.max_seq_length,
-    #     )
+#     # if args.use_unsloth:
+#     #     # Do model patching and add fast LoRA weights
+#     #     model = FastLanguageModel.get_peft_model(
+#     #         model,
+#     #         lora_alpha=args.lora_alpha,
+#     #         lora_dropout=args.lora_dropout,
+#     #         r=args.lora_r,
+#     #         target_modules=args.lora_target_modules.split(",")
+#     #         if args.lora_target_modules != "all-linear"
+#     #         else args.lora_target_modules,
+#     #         use_gradient_checkpointing=training_args.gradient_checkpointing,
+#     #         random_state=training_args.seed,
+#     #         max_seq_length=training_args.max_seq_length,
+#     #     )
 
-    return model, peft_config, tokenizer
+#     return model, peft_config, tokenizer
