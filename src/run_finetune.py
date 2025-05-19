@@ -20,7 +20,8 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
         data_args.dataset,
         data_args.text_columns,
         data_args.label_columns,
-        test_size = data_args.test_size
+        test_size = data_args.test_size,
+        ratio = data_args.ratio
     )
 
     # train_dataset, eval_dataset = dataset['train'], dataset['test']
@@ -96,18 +97,33 @@ if __name__ == "__main__":
 
     parser = HfArgumentParser((ModelArguments, DatasetArguments, SFTConfig))
     
-    # We must assign CUDA_VISIBLE_DEVICES here
-    # before transformers and torch are imported
-    args, _ = parser.parse_known_args()
-    if args.cuda_devices:
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
-        
+    # If we pass only one argument to the script and it's
+    # the path to a json file, let's parse it to get our arguments.
+
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
-    else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+        # We must assign CUDA_VISIBLE_DEVICES here
+        # before transformers and torch are imported
+        file = os.path.abspath(sys.argv[1])
+        import json
+        with open(file) as f:
+            data = json.load(f)
+            f.close()
+        if data.get("cuda_devices"):
+            os.environ["CUDA_VISIBLE_DEVICES"] = data["cuda_devices"]
+        del data
+
+        args = parser.parse_json_file(json_file=file)
     
+    else:
+        # We must assign CUDA_VISIBLE_DEVICES here
+        # before transformers and torch are imported
+        args, _ = parser.parse_known_args()
+        if args.cuda_devices:
+            os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_devices
+
+        args = parser.parse_args_into_dataclasses()
+    
+    model_args, data_args, training_args = args
 
     main(model_args, data_args, training_args)

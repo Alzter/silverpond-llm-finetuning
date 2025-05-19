@@ -288,6 +288,45 @@ def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | l
         samples_per_class = int(math.floor(samples_per_class))
 
     return _get_n_samples_per_class(dataset, samples_per_class, label_columns, shuffle=shuffle, seed=seed)
+    
+def sample_dataset(dataset : Dataset | DatasetDict, ratio : float | None = None, size : int | None = None, seed : int = 42):
+    """
+    Return a random sample of items from a Dataset / DatasetDict using a fraction (ratio) or a number of items (size).
+    Similar to ``pd.DataFrame.sample()``, but with different argument names for compatibility reasons.
+    
+    Args:
+        dataset (Dataset | DatasetDict): The dataset to sample. If this is a DatasetDict, all Datasets inside the DatasetDict are recursively sampled.
+        ratio (float, optional): What fraction of items to sample. Cannot be used with ``size``.
+        size (int, optional): What number of items to sample. Cannot be used with ``ratio``.
+        seed (int, optional): Random state used when shuffling the dataset. Allows for deterministic output. Defaults to 42.
+
+    Returns:
+        sample (Dataset | DatasetDict): The sampled dataset.
+    """
+    
+    if ratio and size: raise ValueError("Cannot sample a dataset using both a fraction (ratio) and a number of samples (size).")
+
+    # Shuffle the dataset so we don't just pick the first n items.
+    dataset.shuffle(seed=seed)
+    
+    # If Dataset is a DatasetDict, recursively sample all data subsets
+    if type(dataset) is DatasetDict:
+        dataset = copy(dataset) # Copy the datasetdict to prevent modifying the original as a side-effect
+        for subset in dataset.keys():
+            dataset[subset] = sample_dataset(dataset[subset], ratio=ratio, size=size, seed=seed)
+
+        return dataset
+    
+    if ratio:
+        size = int(dataset.num_rows * ratio)
+    
+    if not size:
+        raise ValueError("Either a ratio (ratio) or number of samples (size) must be specified.")
+
+    indices = list(range(size))
+
+    dataset = dataset.select(indices)
+    return dataset
 
 def _format_dataset(examples : Dataset) -> dict:
     """
@@ -476,7 +515,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
 
     return dataset, label_names
 
-def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0) -> tuple[Dataset | DatasetDict, dict]:
+def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0, ratio : float = 1) -> tuple[Dataset | DatasetDict, dict]:
     """
     Load and pre-process a supervised text classification dataset.
 
@@ -484,7 +523,8 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
         dataset_name_or_path (str): Accepts the name of a dataset from the HuggingFace Hub or the path of a CSV file to load.
         text_columns (str | list[str]): Which column(s) to use from the dataset as input text (X).
         label_columns (str | list[str]): Which column(s) to use from the dataset as output labels (y).
-        test_size (int, optional): If given, splits the dataset into train/test subsets using test_size as the test ratio. Defaults to 0.
+        test_size (float, optional): If given, splits the dataset into train/test subsets using test_size as the test ratio. Defaults to 0.
+        ratio (float, optional): What percentage of the dataset to use as a ratio. Defaults to 1.
     """
 
     dataset = None
@@ -508,6 +548,10 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
         raise Exception(f"Dataset {dataset_name_or_path} does not point to a Dataset on the HuggingFace hub or a CSV file.")
     
     dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
+
+    if ratio < 1 and ratio > 0:
+       dataset = sample_dataset(dataset, ratio=ratio) 
+
     return dataset, label_names
 
 def load_datasets(train_dataset : str, eval_dataset : str, text_columns : str | list[str], label_columns : str | list[str]):

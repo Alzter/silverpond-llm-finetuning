@@ -111,6 +111,10 @@ class DatasetArguments:
         default = 0,
         metadata = {"help" : "What percentage ratio of the dataset should be reserved for testing."}
     )
+    ratio : float = field(
+        default = 1,
+        metadata = {"help" : "Fraction of the dataset to randomly sample from 0-1."}
+    )
     # dataset_name: Optional[str] = field(
     #     default="timdettmers/openassistant-guanaco",
     #     metadata={"help": "The preference dataset to use."},
