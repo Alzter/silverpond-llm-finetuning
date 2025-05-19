@@ -77,6 +77,7 @@ pkgs.mkShell {
             openpyxl
             xlrd
             imbalanced-learn
+            litellm
 #             tyro
 #             cut-cross-entropy
 #             unsloth
