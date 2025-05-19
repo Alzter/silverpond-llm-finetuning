@@ -12,6 +12,8 @@ from transformers import (
     BitsAndBytesConfig,
 )
 
+from abc import ABC, abstractmethod
+
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -21,7 +23,7 @@ DEFAULT_CHATML_CHAT_TEMPLATE = "{% for message in messages %}\n{{'<|im_start|>' 
 DEFAULT_ZEPHYR_CHAT_TEMPLATE = "{% for message in messages %}\n{% if message['role'] == 'user' %}\n{{ '<|user|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'system' %}\n{{ '<|system|>\n' + message['content'] + eos_token }}\n{% elif message['role'] == 'assistant' %}\n{{ '<|assistant|>\n'  + message['content'] + eos_token }}\n{% endif %}\n{% if loop.last and add_generation_prompt %}\n{{ '<|assistant|>' }}\n{% endif %}\n{% endfor %}"
 
 @dataclass
-class ModelArguments:
+class LocalModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
@@ -92,9 +94,319 @@ class ModelArguments:
         metadata={"help": "Gradient Checkpointing param. Refer the related docs"},
     )
     # use_unsloth: Optional[bool] = field(
-    #     default=False,
+#     default=False,
     #     metadata={"help": "Enables UnSloth for training."},
     # )
+
+@dataclass
+class CloudModelArguments:
+	model_name : str = field(
+        metadata = {"help" : 'Name of the model to load.'}
+    )
+	openai_api_key : str = field(
+		metadata={"help" : "Access key for OpenAI cloud-based AI services."}
+	)
+	anthropic_api_key : str = field(
+		metadata={"help" : "Access key for Anthropic cloud-based AI services."}
+	)
+	huggingface_api_key : str = field(
+		metadata={"help" : "Access key for HuggingFace cloud-based AI services."}
+	)
+	azure_api_key : str = field(
+		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	)
+	azure_api_base : str = field(
+		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	)
+	azure_api_version : str = field(
+		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	)
+
+class PretrainedLM(ABC):
+ 
+    @abstractmethod
+    def generate(
+        self,
+        prompt : str | list[dict[str,str]],
+        max_new_tokens : int = 64,
+        temperature : float = 0,
+        top_p : float | None = None,
+        kwargs : dict = {}
+        ) -> str:
+        """
+        Generate an LLM response to a given query.
+
+        Args:
+            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+                                You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                                if you want to include a system prompt and/or prior chat history.
+            max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+            temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 0.
+            top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
+            kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
+        
+        Returns:
+            response (str): The LLM's response.
+        """
+        return None
+
+class LocalPLM(PretrainedLM):
+    def __init__(self, args : LocalModelArguments):
+        # if args.use_unsloth:
+        #     from unsloth import FastLanguageModel
+        bnb_config = None
+        quant_storage_dtype = None
+    
+        # if (
+        #     torch.distributed.is_available()
+        #     and torch.distributed.is_initialized()
+        #     and torch.distributed.get_world_size() > 1
+        #     and args.use_unsloth
+        # ):
+        #     raise NotImplementedError("Unsloth is not supported in distributed training")
+    
+        if args.use_4bit_quantization:
+            compute_dtype = getattr(torch, args.bnb_4bit_compute_dtype)
+            quant_storage_dtype = getattr(torch, args.bnb_4bit_quant_storage_dtype)
+    
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=args.use_4bit_quantization,
+                bnb_4bit_quant_type=args.bnb_4bit_quant_type,
+                bnb_4bit_compute_dtype=compute_dtype,
+                bnb_4bit_use_double_quant=args.use_nested_quant,
+                bnb_4bit_quant_storage=quant_storage_dtype,
+            )
+    
+            if compute_dtype == torch.float16 and args.use_4bit_quantization:
+                major, _ = torch.cuda.get_device_capability()
+                if major >= 8:
+                    print("=" * 80)
+                    print("Your GPU supports bfloat16, you can accelerate training with the argument --bf16")
+                    print("=" * 80)
+            elif args.use_8bit_quantization:
+                bnb_config = BitsAndBytesConfig(load_in_8bit=args.use_8bit_quantization)
+    
+        # if args.use_unsloth:
+        #     # Load model
+        #     model, _ = FastLanguageModel.from_pretrained(
+        #         model_name=args.model_name_or_path,
+        #         max_seq_length=training_args.max_seq_length,
+        #         dtype=None,
+        #         load_in_4bit=args.use_4bit_quantization,
+        #     )
+        #else:
+        if True:
+            torch_dtype = (
+                quant_storage_dtype if quant_storage_dtype and quant_storage_dtype.is_floating_point else torch.float32
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                args.model_name_or_path,
+                quantization_config=bnb_config,
+                trust_remote_code=True,
+                attn_implementation=args.attn_implementation,#"flash_attention_2" if args.use_flash_attn else "eager",
+                torch_dtype=torch_dtype,
+            )
+    
+        peft_config = None
+        chat_template = None
+        if args.use_peft_lora:# and not args.use_unsloth:
+            peft_config = LoraConfig(
+                lora_alpha=args.lora_alpha,
+                lora_dropout=args.lora_dropout,
+                r=args.lora_r,
+                bias="none",
+                task_type="CAUSAL_LM",
+                target_modules=args.lora_target_modules.split(",")
+                if args.lora_target_modules is not None and args.lora_target_modules != "all-linear"
+                else args.lora_target_modules,
+            )
+    
+        special_tokens = None
+        chat_template = None
+        if args.chat_template_format == "chatml":
+            special_tokens = ChatmlSpecialTokens
+            chat_template = DEFAULT_CHATML_CHAT_TEMPLATE
+        elif args.chat_template_format == "zephyr":
+            special_tokens = ZephyrSpecialTokens
+            chat_template = DEFAULT_ZEPHYR_CHAT_TEMPLATE
+    
+        if special_tokens is not None:
+            tokenizer = AutoTokenizer.from_pretrained(
+                args.model_name_or_path,
+                pad_token=special_tokens.pad_token.value,
+                bos_token=special_tokens.bos_token.value,
+                eos_token=special_tokens.eos_token.value,
+                additional_special_tokens=special_tokens.list(),
+                trust_remote_code=True,
+            )
+            tokenizer.chat_template = chat_template
+    
+            # make embedding resizing configurable?
+            # Transformers 4.46.0+ defaults uses mean_resizing by default, which fails with QLoRA + FSDP because the
+            # embedding could be on meta device, therefore, we set mean_resizing=False in that case (i.e. the status quo
+            # ante). See https://github.com/huggingface/accelerate/issues/1620.
+            uses_transformers_4_46 = packaging.version.parse(transformers.__version__) >= packaging.version.parse("4.46.0")
+            uses_fsdp = os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+            if (bnb_config is not None) and uses_fsdp and uses_transformers_4_46:
+                model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8, mean_resizing=False)
+            else:
+                model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=8)
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+            tokenizer.pad_token = tokenizer.eos_token
+    
+        # if args.use_unsloth:
+        #     # Do model patching and add fast LoRA weights
+        #     model = FastLanguageModel.get_peft_model(
+        #         model,
+        #         lora_alpha=args.lora_alpha,
+        #         lora_dropout=args.lora_dropout,
+        #         r=args.lora_r,
+        #         target_modules=args.lora_target_modules.split(",")
+        #         if args.lora_target_modules != "all-linear"
+        #         else args.lora_target_modules,
+        #         use_gradient_checkpointing=training_args.gradient_checkpointing,
+        #         random_state=training_args.seed,
+        #         max_seq_length=training_args.max_seq_length,
+        #     )
+        
+        self.model, self.peft_config, self.tokenizer = model, peft_config, tokenizer
+    
+    def _format_prompt(self, prompt : str | list[dict[str,str]][str,str]) -> str:
+        """
+        Convert an LLM prompt into string format with a chat template
+        and special tokens.
+
+        Args:
+            prompt (str | dict[str,str]): The prompt for the LLM.
+                                You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                                if you want to include a system prompt and/or prior chat history.
+            tokenizer (AutoTokenizer): The tokenizer to use. Should come with the LLM. Use ``AutoTokenizer.from_pretrained(model_name)`` to instantiate.
+
+        Returns:
+            prompt (str): The prompt with chat template applied converted to string format using special tokens.
+        """
+        if type(prompt) is str:
+            prompt = [{"role": "user", "content": prompt}]
+        
+        prompt = self.tokenizer.apply_chat_template(
+            prompt, tokenize=False, add_generation_prompt=True
+        )
+
+        return prompt
+
+    def generate(
+        self,
+        prompt : str | list[dict[str,str]],
+        max_new_tokens : int = 64,
+        temperature : float = 0,
+        top_p : float | None = None,
+        kwargs : dict = {}
+        ) -> str:
+        """
+        Generate an LLM response to a given query.
+
+        Args:
+            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+                                You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                                if you want to include a system prompt and/or prior chat history.
+            max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
+            top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
+            kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
+        
+        Returns:
+            response (str): The LLM's response.
+        """
+
+
+        # Convert user query into a formatted prompt
+        prompt = self._format_prompt(prompt)
+
+        # Tokenize the formatted prompt
+        tokenized_input = self.tokenizer(prompt,
+                                    add_special_tokens=False,
+                                    return_tensors="pt").to(self.model.device)
+        self.model.eval()
+        
+        # Set do_sample to True to enable deterministic
+        # generation when temperature == 0
+        do_sample = temperature == 0
+        if do_sample: temperature = None
+
+        # Generate the response
+        generation_output = self.model.generate(**tokenized_input,
+                                           max_new_tokens=max_new_tokens,
+                                           do_sample=do_sample,
+                                           temperature=temperature,
+                                           top_p = top_p,
+                                           #top_k = top_k,
+                                           **kwargs)
+
+        # If required, remove the tokens belonging to the prompt
+        if True:
+            input_length = tokenized_input['input_ids'].shape[1]
+            generation_output = generation_output[:, input_length:]
+        
+        # Decode the tokens back into text
+        output = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
+        return output
+
+class CloudLM(PretrainedLM):
+    def __init__(self, args : CloudModelArguments):
+        from litellm.utils import get_llm_provider
+        
+        # Raise an exception if model_name is
+        # not a model that LiteLLM supports
+        get_llm_provider(args.model_name)
+        
+        self.model = args.model_name
+        
+        # Set up API keys for model usage
+        os.environ["OPENAI_API_KEY"] = args.openai_api_key
+        os.environ["ANTHROPIC_API_KEY"] = args.anthropic_api_key
+        os.environ["HUGGINGFACE_API_KEY"] = args.huggingface_api_key
+        os.environ["AZURE_API_KEY"] = args.azure_api_key
+        os.environ["AZURE_API_BASE"] = args.azure_api_base
+        os.environ["AZURE_API_VERSION"] = args.azure_api_version
+
+    def generate(
+        self,
+        prompt : str | list[dict[str,str]],
+        max_new_tokens : int = 64,
+        temperature : float = 0,
+        top_p : float | None = None,
+        kwargs : dict = {}
+        ) -> str:
+        """
+        Generate an LLM response to a given query.
+
+        Args:
+            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+                                You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
+                                if you want to include a system prompt and/or prior chat history.
+            max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
+            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 1.
+            top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
+            kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
+        
+        Returns:
+            response (str): The LLM's response.
+        """
+        from litellm import completion
+
+        response = completion(
+            model=self.model,
+            messages=[prompt],
+            temperature=temperature,
+            top_p=top_p,
+            max_completion_tokens=max_new_tokens,
+            **kwargs
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+
+        return response_text
 
 @dataclass
 class DatasetArguments:
@@ -196,7 +508,7 @@ class ChatmlSpecialTokens(str, Enum):
 #     return train_data, valid_data
 
 
-def create_and_prepare_model(args : ModelArguments):#, training_args):
+def create_and_prepare_model(args : LocalModelArguments):#, training_args):
     # if args.use_unsloth:
     #     from unsloth import FastLanguageModel
     bnb_config = None

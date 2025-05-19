@@ -5,10 +5,10 @@ import os
 import sys
 
 from evaluate import EvaluationConfig
-from utils import ModelArguments, DatasetArguments, create_and_prepare_model
+from utils import LocalModelArguments, DatasetArguments, create_and_prepare_model
 from transformers import HfArgumentParser
 
-def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args : DatasetArguments):
+def main(eval_config : EvaluationConfig, local_model_args : LocalModelArguments, data_args : DatasetArguments):
     # Load evaluation dataset
     import preprocess as pre
     eval_dataset, label_names = pre.load_dataset(
@@ -20,7 +20,7 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
     )
 
     # Load model
-    model, peft_config, tokenizer = create_and_prepare_model(model_args)
+    model, peft_config, tokenizer = create_and_prepare_model(local_model_args)
 
     # Load model
     # device_map = "cuda:0" if len(args.cuda_visible_devices) == 1 else "auto"
@@ -34,7 +34,7 @@ def main(eval_config : EvaluationConfig, model_args : ModelArguments, data_args 
     result.save()
 
 if __name__ == "__main__":
-    parser = HfArgumentParser((EvaluationConfig, ModelArguments, DatasetArguments))
+    parser = HfArgumentParser((EvaluationConfig, LocalModelArguments, DatasetArguments))
     
     # If we pass only one argument to the script and it's
     # the path to a json file, let's parse it to get our arguments.
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
         args = parser.parse_args_into_dataclasses()
 
-    eval_config, model_args, data_args = args
+    eval_config, local_model_args, data_args = args
 
-    main(eval_config, model_args, data_args)
+    main(eval_config, local_model_args, data_args)
 

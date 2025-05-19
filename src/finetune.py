@@ -21,7 +21,7 @@ def finetune(
     output_dir : str | None = None,
     eval_dataset : Dataset | None = None,
     checkpoint : bool | str | None = None
-    ) -> DataFrame:
+    ) -> tuple[SFTTrainer, DataFrame]:
     """Fine-tune an LLM using LoRA and save the resulting adapters in ``output_dir``. The LLM specified in ``model`` **will** be modified by this function.
 
     Args:
@@ -94,58 +94,58 @@ def save_training_history(history : DataFrame, output_dir : str):
     path = os.path.join(output_dir, "loss_history.png")
     plt.savefig( path, dpi=200, bbox_inches='tight' )
 
-def load_llm(model_name_or_path : str, device_map : str = "cuda:0", quantized : bool = True) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
-    """
-    Load an LLM from disk or from huggingface.co/models.
-
-    Args:
-        model_name_or_path (str): Name of the model.
-        device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
-        quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
-
-    Returns:
-        model (AutoPeftModelForCausalLM): The LLM.
-        tokenizer (AutoTokenizer): The tokenizer.
-    """
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=False,
-        bnb_4bit_compute_dtype=torch.float16
-    ) if quantized else None
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path, device_map=device_map, quantization_config=bnb_config)
-
-    return (model, tokenizer)
-
-def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
-    """
-    Load a finetuned LLM from disk.
-
-    Args:
-        model_directory (str): Where to load the fine-tuned model.
-        device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
-        quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
-
-    Returns:
-        model (AutoPeftModelForCausalLM): The fine-tuned LLM.
-        tokenizer (AutoTokenizer): The tokenizer (unchanged from the base model).
-    """
-
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=False,
-        bnb_4bit_compute_dtype=torch.float16
-    ) if quantized else None
-
-    config = PeftConfig.from_pretrained(model_directory)
-
-    tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
-    model = AutoPeftModelForCausalLM.from_pretrained(model_directory, device_map=device_map, quantization_config=bnb_config)
-
-    return (model, tokenizer)
+# def load_llm(model_name_or_path : str, device_map : str = "cuda:0", quantized : bool = True) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+#     """
+#     Load an LLM from disk or from huggingface.co/models.
+# 
+#     Args:
+#         model_name_or_path (str): Name of the model.
+#         device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+#         quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
+# 
+#     Returns:
+#         model (AutoPeftModelForCausalLM): The LLM.
+#         tokenizer (AutoTokenizer): The tokenizer.
+#     """
+#     bnb_config = BitsAndBytesConfig(
+#         load_in_4bit=True,
+#         bnb_4bit_quant_type="nf4",
+#         bnb_4bit_use_double_quant=False,
+#         bnb_4bit_compute_dtype=torch.float16
+#     ) if quantized else None
+# 
+#     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+#     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, device_map=device_map, quantization_config=bnb_config)
+# 
+#     return (model, tokenizer)
+# 
+# def load_finetuned_llm(model_directory : str, device_map : str = "cuda:0", quantized:bool = True) -> tuple[AutoPeftModelForCausalLM, AutoTokenizer]:
+#     """
+#     Load a finetuned LLM from disk.
+# 
+#     Args:
+#         model_directory (str): Where to load the fine-tuned model.
+#         device_map (str, optional): Which device to load the fine-tuned model onto. Defaults to "cuda:0".
+#         quantized (bool, optional): Whether to load the model with 4-bit quantization. Defaults to True.
+# 
+#     Returns:
+#         model (AutoPeftModelForCausalLM): The fine-tuned LLM.
+#         tokenizer (AutoTokenizer): The tokenizer (unchanged from the base model).
+#     """
+# 
+#     bnb_config = BitsAndBytesConfig(
+#         load_in_4bit=True,
+#         bnb_4bit_quant_type="nf4",
+#         bnb_4bit_use_double_quant=False,
+#         bnb_4bit_compute_dtype=torch.float16
+#     ) if quantized else None
+# 
+#     config = PeftConfig.from_pretrained(model_directory)
+# 
+#     tokenizer = AutoTokenizer.from_pretrained(config.base_model_name_or_path)
+#     model = AutoPeftModelForCausalLM.from_pretrained(model_directory, device_map=device_map, quantization_config=bnb_config)
+# 
+#     return (model, tokenizer)
 
 def _format_prompt(prompt : str | dict, tokenizer : AutoTokenizer) -> str:
     """
