@@ -10,8 +10,9 @@ from utils import LocalModelArguments, DatasetArguments
 def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, training_args : SFTConfig):
     from transformers import set_seed
     from trl import SFTTrainer
-    from utils import create_and_prepare_model   # Set seed for reproducibility
-    
+    from utils import LocalPLM
+
+    # Set seed for reproducibility
     set_seed(training_args.seed)
 
     # Load training/evaluation dataset
@@ -40,13 +41,10 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
     #)
     
     # model
-    model, peft_config, tokenizer = create_and_prepare_model(local_model_args)
+    model = LocalPLM(local_model_args)
     
-    import finetune as ft
-
     import subprocess
     subprocess.run(["nvidia-smi"])
-    
     
     # Enable gradient checkpointing (saves memory)
     model.config.use_cache = not training_args.gradient_checkpointing
@@ -55,17 +53,15 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": local_model_args.use_reentrant}
     
     # Finetune the model
-    trainer, history = ft.finetune(
-        model=model, tokenizer=tokenizer,
+    trainer, history = model.finetune(
         train_dataset=dataset['train'],
         eval_dataset=dataset['test'],
-        lora_config=peft_config,
         sft_config=training_args,
         checkpoint=training_args.resume_from_checkpoint
     )
     
     # Save training history
-    ft.save_training_history(history, training_args.output_dir)
+    model.save_training_history(history, training_args.output_dir)
 
     # trainer
     # trainer = SFTTrainer(

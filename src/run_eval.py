@@ -5,7 +5,7 @@ import os
 import sys
 
 from evaluate import EvaluationConfig
-from utils import LocalModelArguments, DatasetArguments, create_and_prepare_model
+from utils import LocalModelArguments, DatasetArguments, LocalPLM
 from transformers import HfArgumentParser
 
 def main(eval_config : EvaluationConfig, local_model_args : LocalModelArguments, data_args : DatasetArguments):
@@ -20,7 +20,7 @@ def main(eval_config : EvaluationConfig, local_model_args : LocalModelArguments,
     )
 
     # Load model
-    model, peft_config, tokenizer = create_and_prepare_model(local_model_args)
+    model = LocalPLM(local_model_args)
 
     # Load model
     # device_map = "cuda:0" if len(args.cuda_visible_devices) == 1 else "auto"
@@ -28,7 +28,7 @@ def main(eval_config : EvaluationConfig, local_model_args : LocalModelArguments,
     
     # Run evaluation
     import evaluate as ev
-    result = ev.evaluate(model=model,tokenizer=tokenizer,label_names=label_names,eval_dataset=eval_dataset,eval_config=eval_config)
+    result = ev.evaluate(model=model,label_names=label_names,eval_dataset=eval_dataset,eval_config=eval_config)
     
     # Save evaluation results
     result.save()

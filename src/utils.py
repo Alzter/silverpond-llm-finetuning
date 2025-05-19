@@ -104,6 +104,9 @@ class LocalModelArguments:
 
 @dataclass
 class CloudModelArguments:
+	use_cloud_model : bool = field(
+        metadata = {"help" : "If true, :"}
+    )
 	model_name : str = field(
         metadata = {"help" : 'Name of the model to load.'}
     )
@@ -362,7 +365,6 @@ class LocalPLM(PretrainedLM):
     
     def finetune(self,
         train_dataset : Dataset,
-        lora_config : LoraConfig,
         sft_config : SFTConfig,
         output_dir : str | None = None,
         eval_dataset : Dataset | None = None,
@@ -373,7 +375,6 @@ class LocalPLM(PretrainedLM):
         Args:
             model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``LocalPLM(LocalModelArguments)`` to instantiate.
             train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset``.
-            lora_config (LoraConfig): LoRA hyperparameters, including the rank of the adapters and the scaling factor.
             sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
             output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``. Defaults to None.
             eval_dataset (Dataset, optional): The dataset of training samples to validate the model on. You must pre-process this dataset using ``preprocess_dataset``. Defaults to None.
@@ -391,7 +392,7 @@ class LocalPLM(PretrainedLM):
             output_dir = sft_config.output_dir
     
         self.model = prepare_model_for_kbit_training(self.model)
-        self.model = get_peft_model(self.model, lora_config)
+        self.model = get_peft_model(self.model, self.peft_config)
     
         trainer = SFTTrainer(
             model=self.model,
