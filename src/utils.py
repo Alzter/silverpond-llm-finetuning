@@ -9,6 +9,7 @@ import packaging.version
 import pandas as pd
 from pandas import DataFrame
 from matplotlib import pyplot as plt
+import time
 
 import torch
 import transformers
@@ -134,6 +135,14 @@ class CloudModelArguments:
 		default = None
 	)
 
+@dataclass
+class ModelResponse():
+    text : str = field(metadata={"help":"Raw message content from LLM output."})
+    prompt_tokens : int = field(metadata={"help":"Number of tokens used by the LLM to read the prompt."})
+    completion_tokens : int = field(metadata={"help":"Number of tokens used by the LLM to answer the prompt."})
+    total_tokens : int = field(metadata={"help":"Number of tokens used by the LLM to answer the query."})
+    latency : float = field(metadata={"help":"How long an LLM response took to generate in seconds."})
+
 class PretrainedLM(ABC):
  
     @abstractmethod
@@ -144,7 +153,7 @@ class PretrainedLM(ABC):
         temperature : float = 0,
         top_p : float | None = None,
         kwargs : dict = {}
-        ) -> str:
+        ) -> ModelResponse:
         """
         Generate an LLM response to a given query.
 
@@ -160,7 +169,7 @@ class PretrainedLM(ABC):
         Returns:
             response (str): The LLM's response.
         """
-        return None
+        raise NotImplementedError()
 
 class LocalPLM(PretrainedLM):
     def __init__(self, args : LocalModelArguments):
@@ -318,7 +327,7 @@ class LocalPLM(PretrainedLM):
         temperature : float = 0,
         top_p : float | None = None,
         kwargs : dict = {}
-        ) -> str:
+        ) -> ModelResponse:
         """
         Generate an LLM response to a given query.
 
@@ -334,7 +343,7 @@ class LocalPLM(PretrainedLM):
         Returns:
             response (str): The LLM's response.
         """
-
+        time_started = time.time()
 
         # Convert user query into a formatted prompt
         prompt = self._format_prompt(prompt)
@@ -358,15 +367,24 @@ class LocalPLM(PretrainedLM):
                                            top_p = top_p,
                                            #top_k = top_k,
                                            **kwargs)
+        
+        # Remove the tokens belonging to the prompt
+        input_length = tokenized_input['input_ids'].shape[1]
 
-        # If required, remove the tokens belonging to the prompt
-        if True:
-            input_length = tokenized_input['input_ids'].shape[1]
-            generation_output = generation_output[:, input_length:]
+        generation_output = generation_output[:, input_length:]
+
+        output_length = generation_output.shape[1]
         
         # Decode the tokens back into text
         output = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
-        return output
+        
+        return ModelResponse(
+            text=output,
+            prompt_tokens=input_length,
+            completion_tokens=output_length,
+            total_tokens=input_length+output_length,
+            latency=time.time() - time_started
+        )
     
     def finetune(self,
         train_dataset : Dataset,
@@ -475,7 +493,7 @@ class CloudPLM(PretrainedLM):
         temperature : float = 0,
         top_p : float | None = None,
         kwargs : dict = {}
-        ) -> str:
+        ) -> ModelResponse:
         """
         Generate an LLM response to a given query.
 
@@ -491,6 +509,9 @@ class CloudPLM(PretrainedLM):
         Returns:
             response (str): The LLM's response.
         """
+
+        time_started = time.time()
+
         from litellm import completion
         
         if type(prompt) is str:
@@ -513,8 +534,14 @@ class CloudPLM(PretrainedLM):
             raise BadRequestError(f"Error generating model response. Traceback: {str(e)}")
         
         response_text = response_text.strip()
-
-        return response_text
+        
+        return ModelResponse(
+            text = response_text,
+            prompt_tokens = response.usage.prompt_tokens,
+            completion_tokens = response.usage.completion_tokens,
+            total_tokens = response.usage.total_tokens,
+            latency = time.time() - time_started
+        )
 
 @dataclass
 class DatasetArguments:
