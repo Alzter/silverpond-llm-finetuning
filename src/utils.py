@@ -478,7 +478,7 @@ class CloudPLM(PretrainedLM):
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
-            temperature (float, optional): Higher = greater likelihood of low probability words. Defaults to 0.
+            temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 0.
             top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
             kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
         
@@ -486,10 +486,15 @@ class CloudPLM(PretrainedLM):
             response (str): The LLM's response.
         """
         from litellm import completion
+        
+        if type(prompt) is str:
+            prompt = [{"role": "user", "content": prompt}]
+
+        if not type(prompt) is list: raise ValueError("Prompt must be a str or list[dict[str,str]] using chat template format (see https://huggingface.co/docs/transformers/main/en/chat_templating).")
 
         response = completion(
             model=self.model,
-            messages=[prompt],
+            messages=prompt,
             temperature=temperature,
             top_p=top_p,
             max_completion_tokens=max_new_tokens,
