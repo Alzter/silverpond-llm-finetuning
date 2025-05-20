@@ -190,17 +190,22 @@ class EvaluationResult:
         normalize = 'true' if normalize else None
         return confusion_matrix(y_true=y_true,y_pred=y_pred,normalize=normalize)
         
-    def plot_confusion_matrix(self, label_name : str, char_limit:int = 15, max_classes:int = 15) -> ConfusionMatrixDisplay:
+    def plot_confusion_matrix(self, label_name : str | None = None, char_limit:int = 15, max_classes:int = 15) -> ConfusionMatrixDisplay:
         """Generate a confusion matrix showing the prediction accuracy of the model for a given class label.
 
         Args:
-            label_name (str): What label to plot the confusion matrix for.
+            label_name (str, optional): What label to plot the confusion matrix for. Must be given if len(label_names) > 0. Defaults to None. 
             char_limit (int, optional): Truncate tick labels to this many characters. Defaults to 15.
             max_labels (int, optional): If there are more classes than this, hide all text in the graph altogether. Defaults to 15.
 
         Returns:
             ConfusionMatrixDisplay: The confusion matrix
         """
+        
+        if not label_name:
+            if len(self.label_names) == 1: label_name = list(self.label_names.keys())[0]
+            else: raise ValueError("label_name must be given if len(label_names) > 1")
+
         y_true, y_pred, label_names = self.labels_true[label_name], self.labels_pred[label_name], self.label_names[label_name]
         y_true = [label_names[i] for i in y_true]
         y_pred = [label_names[i] for i in y_pred]
