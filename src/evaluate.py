@@ -44,6 +44,7 @@ class EvaluationConfig:
         prompt_role (str, optional): What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.
         temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 1.
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
+        eval_kwargs (dict, optional): Dict of keyword arguments to pass to PretrainedLM.generate(). Defaults to {}.
         out_path (str,optional): Which directory to save the evaluation result by default. Defaults to "results".
         """
     technique_name : str = field(
@@ -67,6 +68,10 @@ class EvaluationConfig:
     top_p : Optional[float] = field(
         default=None,
         metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0.'}
+    )
+    eval_kwargs : Optional[dict] = field(
+        default = {},
+        metadata = {"help" : "Dict of keyword arguments to pass to PretrainedLM.generate()."}
     )
     out_path : str = field(
         default="results",
@@ -102,9 +107,7 @@ class EvaluationResult:
         labels_pred (dict[str, list]): List of predicted class IDs (int) for each sample for each label. (y_pred)
         labels_true (dict[str, list]): List of true class IDs (int) for each sample for each label. (y_true)
         label_names (dict[str, list]): List of all class names for each label.
-        llm_responses (list[str]): Raw LLM response to each sample.
-        total_tokens_per_response (list[int]): Total number of tokens for each LLM response.
-        prediction_times (list[float]): How long it took the LLM to classify each sample in seconds.
+        llm_responses (list[ModelResponse]): LLM response for each sample.
         total_tokens (int): Total number of tokens used to perform the evaluation.
         total_time_elapsed (float): How long the evaluation took to run overall in seconds.
     """
@@ -113,9 +116,7 @@ class EvaluationResult:
     labels_pred : dict[str, list]
     labels_true : dict[str, list]
     label_names : dict[str, list]
-    llm_responses : list[str]
-    total_tokens_per_response : list[int]
-    prediction_times : list[float]
+    llm_responses : list[ModelResponse]
     total_tokens : int
     total_time_elapsed : float
 
@@ -159,11 +160,12 @@ class EvaluationResult:
         
         answers = {
         "Text" : np.array(self.texts),
-        "LLM Response" : np.array(self.llm_responses),
+        "LLM Response" : np.array([response.text for response in self.llm_responses]),
+        "LLM Reasoning" : np.array([response.reasoning for response in self.llm_responses]),
         #"Predicted Label" : np.array(y_pred),
         #"True Label" : np.array(y_true),
-        "Prediction Time" : np.array(self.prediction_times),
-        "Total Tokens" : np.array(self.total_tokens_per_response)
+        "Prediction Time" : np.array([response.latency for response in self.llm_responses]),
+        "Total Tokens" : np.array([response.total_tokens for response in self.llm_responses])
         }
 
         for label in self.label_names.keys():
@@ -730,7 +732,6 @@ def evaluate(
         time_elapsed.append(time.time())
 
     total_time_elapsed = time_elapsed[-1] - time_elapsed[0]
-    prediction_times = list(np.diff(time_elapsed))
 
     # Get all class IDs from the label(s) in eval_dataset (y_true)
     groundtruth = [message[-1]['content'] for message in eval_dataset['messages']]
@@ -747,7 +748,5 @@ def evaluate(
         labels_true=labels_true,
         label_names=label_names,
         llm_responses=llm_responses,
-        total_tokens_per_response=total_tokens_per_response,
-        prediction_times=prediction_times,
         total_tokens=sum(total_tokens_per_response),
         total_time_elapsed=total_time_elapsed)
