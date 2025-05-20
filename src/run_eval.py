@@ -19,7 +19,8 @@ def main(eval_config : EvaluationConfig, local_model_args : LocalModelArguments,
         data_args.text_columns,
         data_args.label_columns,
         test_size=0,
-        ratio=data_args.ratio
+        ratio=data_args.ratio,
+        size=data_args.size
     )
     
     # If a cloud model name is specified, let's assume the model is a cloud-based one

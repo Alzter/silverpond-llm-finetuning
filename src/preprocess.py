@@ -231,7 +231,7 @@ def _get_n_samples_per_class(dataset : Dataset, n : int, label_columns : str | l
     
     return sample
 
-def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | list = "label", ratio : float = None, size : int = None, samples_per_class : int = None, shuffle : bool = True, seed:int=0) -> Dataset | DatasetDict:
+def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | list = "label", ratio : float | None = None, size : int | None = None, samples_per_class : int | None = None, shuffle : bool = True, seed:int=0) -> Dataset | DatasetDict:
     """
     Given a dataset, return a smaller dataset with an equal number of samples per class.
     
@@ -243,9 +243,9 @@ def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | l
     Args:
         dataset (Dataset | DatasetDict): The dataset to sample.
         label_columns (str : list, optional): The column name(s) for the labels in the dataset. Defaults to "label".
-        ratio (float, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
-        size (int, optional): Number of items the new dataset should have. Defaults to None.
-        samples_per_class (int, optional): Number of items per class the new dataset should have. Defaults to None.
+        ratio (float | None, optional): What percentage of the dataset to sample from 1-0. Defaults to None.
+        size (int | None, optional): Number of items the new dataset should have. Defaults to None.
+        samples_per_class (int | None, optional): Number of items per class the new dataset should have. Defaults to None.
         shuffle (bool, optional): Whether to shuffle the dataset before and after sampling it. Defaults to True.
         seed (int, optional): RNG seed. Defaults to 0.
 
@@ -269,7 +269,9 @@ def undersample_dataset(dataset : Dataset | DatasetDict, label_columns : str | l
         if column not in dataset.features.keys(): raise ValueError(f"Dataset has no column: {column}")
 
     if ratio is None and size is None and samples_per_class is None:
-        raise ValueError("Either ratio, size, or samples_per_class must be given.")
+        raise ValueError("Either ratio, size, or samples_per_class must be given for dataset undersampling.")
+    if ratio and size:
+        raise ValueError("Cannot undersample a dataset using both a fraction (ratio) and a number of samples (size).")
 
     # If samples_per_class is not given, we have to calculate
     # how many samples to allocate to each class based on
@@ -304,10 +306,13 @@ def sample_dataset(dataset : Dataset | DatasetDict, ratio : float | None = None,
         sample (Dataset | DatasetDict): The sampled dataset.
     """
     
-    if ratio and size: raise ValueError("Cannot sample a dataset using both a fraction (ratio) and a number of samples (size).")
+    if ratio is None and size is None:
+        raise ValueError("Either a fraction (ratio) or number of samples (size) must be specified for dataset sampling.")
+    if ratio and size:
+        raise ValueError("Cannot sample a dataset using both a fraction (ratio) and a number of samples (size).")
 
     # Shuffle the dataset so we don't just pick the first n items.
-    dataset.shuffle(seed=seed)
+    dataset=dataset.shuffle(seed=seed)
     
     # If Dataset is a DatasetDict, recursively sample all data subsets
     if type(dataset) is DatasetDict:
@@ -515,7 +520,15 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
 
     return dataset, label_names
 
-def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0, ratio : float = 1, split : str | None = None) -> tuple[Dataset | DatasetDict, dict]:
+def load_dataset(
+        dataset_name_or_path : str,
+        text_columns : str | list[str],
+        label_columns : str | list[str],
+        test_size : float = 0,
+        balanced : bool = False,
+        ratio : float | None = None,
+        size : int | None = None,
+        split : str | None = None) -> tuple[Dataset | DatasetDict, dict]:
     """
     Load and pre-process a supervised text classification dataset.
 
@@ -524,7 +537,9 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
         text_columns (str | list[str]): Which column(s) to use from the dataset as input text (X).
         label_columns (str | list[str]): Which column(s) to use from the dataset as output labels (y).
         test_size (float, optional): If given, splits the dataset into train/test subsets using test_size as the test ratio. Defaults to 0.
-        ratio (float, optional): What percentage of the dataset to use as a ratio. Defaults to 1.
+        balanced (bool, optional): Whether to perform stratified undersampling on the dataset to get equal class distributions. Defaults to False.
+        ratio (float, optional): Fraction of the dataset to sample randomly ∈ (0, 1]. Cannot be used with ``size``. Defaults to None.
+        size (int, optional): Number of items to sample randomly from the dataset. Cannot be used with ``ratio``. Defaults to None.
         split (str, optional): Which subset of the dataset to use (e.g., "train","test") for online datasets. Defaults to None.
     """
 
@@ -548,26 +563,18 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
     if not dataset:
         raise Exception(f"Dataset {dataset_name_or_path} does not point to a Dataset on the HuggingFace hub or a CSV file.")
     
-    dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
+    if ratio or size:
+        if ratio:
+            if ratio > 1 or ratio <= 0: raise ValueError("Dataset sampling ratio must be > 0 and <= 1.")
+        if size:
+            if size <= 0: raise ValueError("Dataset sampling size must be > 0.")
 
-    if ratio < 1 and ratio > 0:
-       dataset = sample_dataset(dataset, ratio=ratio) 
+        if balanced:
+            dataset = undersample_dataset(dataset, ratio=ratio, size=size, label_columns=label_columns)
+        else:
+            dataset = sample_dataset(dataset, ratio=ratio, size=size) 
+    
+    dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
 
     return dataset, label_names
 
-def load_datasets(train_dataset : str, eval_dataset : str, text_columns : str | list[str], label_columns : str | list[str]):
-    """
-    Load and pre-process two supervised text classification datasets for LLM fine-tuning and evaluation.
-
-    Args:
-        train_dataset (str): Training dataset name or path. Can specify a dataset from the HuggingFace Hub or the path of a CSV file to load.
-        eval_dataset (str): Evaluation dataset name or path. Can specify a dataset from the HuggingFace Hub or the path of a CSV file to load.
-        text_columns (str | list[str]): Which column(s) to use from the datasets as input text (X).
-        label_columns (str | list[str]): Which column(s) to use from the datasets as output labels (y).
-    """
-    
-    train_dataset, label_names = load_dataset(train_dataset, text_columns=text_columns, label_columns=label_columns, test_size=0)
-
-    eval_dataset, _ = load_dataset(eval_dataset, text_columns=text_columns, label_columns=label_columns, test_size=0)
-
-    return (train_dataset, eval_dataset, label_names)

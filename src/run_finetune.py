@@ -25,7 +25,8 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
         data_args.text_columns,
         data_args.label_columns,
         test_size = data_args.test_size,
-        ratio = data_args.ratio
+        ratio = data_args.ratio,
+        size = data_args.size
     )
 
     # train_dataset, eval_dataset = dataset['train'], dataset['test']
