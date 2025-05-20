@@ -1,25 +1,25 @@
 import pytest
 import evaluate as ev
 import preprocess as pre
-import model_prompts
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from utils import LocalPLM, LocalModelArguments
+#from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from datasets import load_dataset
 import torch
 import pandas as pd
 
 @pytest.fixture
-def llm():
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit = True,
+def model():
+    args = LocalModelArguments(
+        model_name_or_path = "Qwen/Qwen2.5-7B-Instruct",
+        use_4bit_quantization = True,
         bnb_4bit_quant_type = "nf4", # QLoRA uses 4-bit NormalFloat precision,
-        bnb_4bit_use_double_quant = True, # QLoRA uses double quantising,
-        bnb_4bit_compute_dtype = torch.float16
+        use_nested_quant = True, # QLoRA uses double quantizing
+        bnb_4bit_compute_dtype = "float16",
+        cuda_devices = "3"
     )
-
-    model_id = "Qwen/Qwen2.5-7B-Instruct"
-    model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=bnb_config)
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    return (model, tokenizer)
+    
+    model = LocalPLM(args)
+    return model 
 
 @pytest.fixture
 def eval_dataset():
@@ -31,20 +31,52 @@ def eval_dataset():
 @pytest.fixture()
 def csv_dataset():
     return pd.read_csv("tests/test_data.csv", low_memory=False)
-    
 
-def test_evaluate_llm(llm, eval_dataset):
-    model, tokenizer = llm
+@pytest.fixture()
+def eval_prompt(eval_dataset):
+    _, label_names = eval_dataset
+
+    return ev.create_prompt(
+        data_sample_name = "article",
+        label_names = label_names
+    )
+
+def test_create_prompt(eval_prompt):
+
+    expected = """You are an expert at classifying articles into the following categories:
+
+CATEGORIES:
+0. Company
+1. EducationalInstitution
+2. Artist
+3. Athlete
+4. OfficeHolder
+5. MeanOfTransportation
+6. Building
+7. NaturalPlace
+8. Village
+9. Animal
+10. Plant
+11. Album
+12. Film
+13. WrittenWork
+
+Read the following article then answer with the name of the category which suits it best.
+Answer with ONLY the name of the category, i.e. "Company"."""
+    
+    assert(expected == eval_prompt, "Generating an evaluation prompt should follow a specific structure.")
+
+def test_evaluate_llm(model, eval_dataset, eval_prompt):
     eval_data, label_names = eval_dataset
 
     eval_config = ev.EvaluationConfig(
         technique_name="Zero-shot",
-        prompt = model_prompts.DBPEDIA["ZERO_SHOT"],
+        prompt = eval_prompt,
         max_tokens = 3
     )
 
     result = ev.evaluate(
-        model, tokenizer,
+        model,
         label_names=label_names,
         eval_dataset=eval_data,
         eval_config=eval_config

@@ -2,12 +2,11 @@ import dataclasses
 from dataclasses import dataclass, asdict, field
 from typing import Optional
 from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import os, shutil, re
+from utils import PretrainedLM
+import os, re
 from tqdm import tqdm
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
 from matplotlib import pyplot as plt
-import finetune as ft
 import pandas as pd
 from pandas import DataFrame
 import numpy as np
@@ -43,10 +42,8 @@ class EvaluationConfig:
                           which label it selected. See ``_get_class_id_from_model_response()`` for implementation details.
         prompt (str, optional): Optional prompt to give the LLM before each text sample. Use to provide the LLM with classification instructions. Leave empty for fine-tuned models.
         prompt_role (str, optional): What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.
-        do_sample (bool, optional): If False, enables deterministic generation. Defaults to False.
-        temperature (float, optional): Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False. Defaults to None.
-        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False. Defaults to None.
-        top_k (float, optional): The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False. Defaults to None.
+        temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 1.
+        top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
         out_path (str,optional): Which directory to save the evaluation result by default. Defaults to "results".
         """
     technique_name : str = field(
@@ -63,23 +60,15 @@ class EvaluationConfig:
         default='system',
         metadata = {"help" : 'What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.'}
     )
-    do_sample : Optional[bool] = field(
-        default=False,
-        metadata = {"help" : 'If False, enables deterministic generation. Defaults to False.'}
-    )
-    temperature : Optional[float] = field(
-        default=None,
-        metadata = {"help" : 'Higher = greater likelihood of low probability words. Leave empty if ``do_sample`` is False.'}
+    temperature : float = field(
+        default=0,
+        metadata = {"help" : 'Sampling temperature to be used. Higher = greater likelihood of low probability words.'}
     )
     top_p : Optional[float] = field(
         default=None,
-        metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if ``do_sample`` is False.'}
+        metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0.'}
     )
-    top_k : Optional[float] = field(
-        default=None,
-        metadata = {"help" : 'The number of highest probability vocabulary tokens to keep for top-k-filtering. Leave empty if ``do_sample`` is False.'}
-    )
-    out_path : Optional[str] = field(
+    out_path : str = field(
         default="results",
         metadata = {"help" : 'Which directory to save the evaluation result by default.'}
     )
@@ -201,17 +190,22 @@ class EvaluationResult:
         normalize = 'true' if normalize else None
         return confusion_matrix(y_true=y_true,y_pred=y_pred,normalize=normalize)
         
-    def plot_confusion_matrix(self, label_name : str, char_limit:int = 15, max_classes:int = 15) -> ConfusionMatrixDisplay:
+    def plot_confusion_matrix(self, label_name : str | None = None, char_limit:int = 15, max_classes:int = 15) -> ConfusionMatrixDisplay:
         """Generate a confusion matrix showing the prediction accuracy of the model for a given class label.
 
         Args:
-            label_name (str): What label to plot the confusion matrix for.
+            label_name (str, optional): What label to plot the confusion matrix for. Must be given if len(label_names) > 0. Defaults to None. 
             char_limit (int, optional): Truncate tick labels to this many characters. Defaults to 15.
             max_labels (int, optional): If there are more classes than this, hide all text in the graph altogether. Defaults to 15.
 
         Returns:
             ConfusionMatrixDisplay: The confusion matrix
         """
+        
+        if not label_name:
+            if len(self.label_names) == 1: label_name = list(self.label_names.keys())[0]
+            else: raise ValueError("label_name must be given if len(label_names) > 1")
+
         y_true, y_pred, label_names = self.labels_true[label_name], self.labels_pred[label_name], self.label_names[label_name]
         y_true = [label_names[i] for i in y_true]
         y_pred = [label_names[i] for i in y_pred]
@@ -663,8 +657,7 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
     return class_ids
 
 def evaluate(
-    model : AutoModelForCausalLM,
-    tokenizer : AutoTokenizer,
+    model : PretrainedLM,
     label_names : dict,
     eval_dataset : Dataset,
     eval_config : EvaluationConfig
@@ -712,12 +705,12 @@ def evaluate(
             prompt.pop(0)
 
         # Get the LLM to generate an answer
-        response = ft.generate(
-                            prompt=prompt, model=model, tokenizer=tokenizer,
-                            max_new_tokens = eval_config.max_tokens,
-                            do_sample=eval_config.do_sample, temperature=eval_config.temperature,
-                            top_p=eval_config.top_p, top_k=eval_config.top_k
-                            )
+        response = model.generate(
+                        prompt=prompt,
+                        max_new_tokens = eval_config.max_tokens,
+                        temperature=eval_config.temperature,
+                        top_p=eval_config.top_p
+                    )
         
         # Extract the class ID(s) from the LLM's answer if one exists
         pred_classes = _get_class_ids_from_model_response(response, label_names)

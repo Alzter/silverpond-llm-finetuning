@@ -3,15 +3,19 @@ import sys
 
 from transformers import HfArgumentParser
 from trl import SFTConfig
-from utils import ModelArguments, DatasetArguments
+from utils import LocalModelArguments, DatasetArguments
 
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 
-def main(model_args : ModelArguments, data_args : DatasetArguments, training_args : SFTConfig):
+def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, training_args : SFTConfig):
     from transformers import set_seed
     from trl import SFTTrainer
-    from utils import create_and_prepare_model   # Set seed for reproducibility
+    from utils import LocalPLM
     
+    if not local_model_args.model_name_or_path:
+        raise ValueError("Argument required: model_name_or_path")
+
+    # Set seed for reproducibility
     set_seed(training_args.seed)
 
     # Load training/evaluation dataset
@@ -21,7 +25,8 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
         data_args.text_columns,
         data_args.label_columns,
         test_size = data_args.test_size,
-        ratio = data_args.ratio
+        ratio = data_args.ratio,
+        size = data_args.size
     )
 
     # train_dataset, eval_dataset = dataset['train'], dataset['test']
@@ -36,36 +41,31 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
     #    tokenizer,
     #    data_args,
     #    training_args,
-    #    apply_chat_template=model_args.chat_template_format != "none",
+    #    apply_chat_template=local_model_args.chat_template_format != "none",
     #)
     
     # model
-    model, peft_config, tokenizer = create_and_prepare_model(model_args)
+    model = LocalPLM(local_model_args)
     
-    import finetune as ft
-
     import subprocess
     subprocess.run(["nvidia-smi"])
     
-    
     # Enable gradient checkpointing (saves memory)
     model.config.use_cache = not training_args.gradient_checkpointing
-    # training_args.gradient_checkpointing = training_args.gradient_checkpointing and not model_args.use_unsloth
+    # training_args.gradient_checkpointing = training_args.gradient_checkpointing and not local_model_args.use_unsloth
     if training_args.gradient_checkpointing:
-        training_args.gradient_checkpointing_kwargs = {"use_reentrant": model_args.use_reentrant}
+        training_args.gradient_checkpointing_kwargs = {"use_reentrant": local_model_args.use_reentrant}
     
     # Finetune the model
-    trainer, history = ft.finetune(
-        model=model, tokenizer=tokenizer,
+    trainer, history = model.finetune(
         train_dataset=dataset['train'],
         eval_dataset=dataset['test'],
-        lora_config=peft_config,
         sft_config=training_args,
         checkpoint=training_args.resume_from_checkpoint
     )
     
     # Save training history
-    ft.save_training_history(history, training_args.output_dir)
+    model.save_training_history(history, training_args.output_dir)
 
     # trainer
     # trainer = SFTTrainer(
@@ -95,7 +95,7 @@ def main(model_args : ModelArguments, data_args : DatasetArguments, training_arg
 
 if __name__ == "__main__":
 
-    parser = HfArgumentParser((ModelArguments, DatasetArguments, SFTConfig))
+    parser = HfArgumentParser((LocalModelArguments, DatasetArguments, SFTConfig))
     
     # If we pass only one argument to the script and it's
     # the path to a json file, let's parse it to get our arguments.
@@ -124,6 +124,6 @@ if __name__ == "__main__":
 
         args = parser.parse_args_into_dataclasses()
     
-    model_args, data_args, training_args = args
+    local_model_args, data_args, training_args = args
 
-    main(model_args, data_args, training_args)
+    main(local_model_args, data_args, training_args)
