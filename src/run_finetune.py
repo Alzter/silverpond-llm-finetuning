@@ -11,6 +11,9 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
     from transformers import set_seed
     from trl import SFTTrainer
     from utils import LocalPLM
+    
+    if not local_model_args.model_name_or_path:
+        raise ValueError("Argument required: model_name_or_path")
 
     # Set seed for reproducibility
     set_seed(training_args.seed)

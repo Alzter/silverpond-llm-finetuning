@@ -515,7 +515,7 @@ def preprocess_dataset(dataset : Dataset | DatasetDict, text_columns : str | lis
 
     return dataset, label_names
 
-def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0, ratio : float = 1) -> tuple[Dataset | DatasetDict, dict]:
+def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], label_columns : str | list[str], test_size : float = 0, ratio : float = 1, split : str | None = None) -> tuple[Dataset | DatasetDict, dict]:
     """
     Load and pre-process a supervised text classification dataset.
 
@@ -525,13 +525,14 @@ def load_dataset(dataset_name_or_path : str, text_columns : str | list[str], lab
         label_columns (str | list[str]): Which column(s) to use from the dataset as output labels (y).
         test_size (float, optional): If given, splits the dataset into train/test subsets using test_size as the test ratio. Defaults to 0.
         ratio (float, optional): What percentage of the dataset to use as a ratio. Defaults to 1.
+        split (str, optional): Which subset of the dataset to use (e.g., "train","test") for online datasets. Defaults to None.
     """
 
     dataset = None
 
     # Attempt to load the Dataset from the HuggingFace Hub
     try:
-        dataset = hf_load_dataset(dataset_name_or_path)
+        dataset = hf_load_dataset(dataset_name_or_path, split=split)
         if type(dataset) is Dataset:
             if test_size: dataset = dataset.train_test_split(test_size = test_size)
     except Exception: dataset = None

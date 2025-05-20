@@ -32,10 +32,11 @@ class LocalModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
 
-    model_name_or_path: str = field(
+    model_name_or_path: Optional[str] = field(
+        default=None,
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    cuda_devices: Optional[str] = field(
+    cuda_devices: str = field(
         default="1",
         metadata={"help":"Comma-separated list of GPU IDs to use for training."}
     )
@@ -104,29 +105,33 @@ class LocalModelArguments:
 
 @dataclass
 class CloudModelArguments:
-	use_cloud_model : bool = field(
-        metadata = {"help" : "If true, :"}
+	cloud_model_name : Optional[str] = field(
+        metadata = {"help" : 'If provided, loads an LLM from the cloud using LiteLLM rather than locally. Requires an API key depending on model vendor.'},
+		default = None
     )
-	model_name : str = field(
-        metadata = {"help" : 'Name of the model to load.'}
-    )
-	openai_api_key : str = field(
-		metadata={"help" : "Access key for OpenAI cloud-based AI services."}
+	openai_api_key : Optional[str] = field(
+		metadata={"help" : "Access key for OpenAI LLMs."},
+		default = None
 	)
-	anthropic_api_key : str = field(
-		metadata={"help" : "Access key for Anthropic cloud-based AI services."}
+	anthropic_api_key : Optional[str] = field(
+		metadata={"help" : "Access key for Anthropic LLMs."},
+		default = None
 	)
-	huggingface_api_key : str = field(
-		metadata={"help" : "Access key for HuggingFace cloud-based AI services."}
+	huggingface_api_key : Optional[str] = field(
+		metadata={"help" : "Access key for HuggingFace LLMs."},
+		default = None
 	)
-	azure_api_key : str = field(
-		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	azure_api_key : Optional[str] = field(
+		metadata={"help" : "Access key for Microsoft Azure LLMs."},
+		default = None
 	)
-	azure_api_base : str = field(
-		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	azure_api_base : Optional[str] = field(
+		metadata={"help" : "Access key for Microsoft Azure LLMs."},
+		default = None
 	)
-	azure_api_version : str = field(
-		metadata={"help" : "Access key for Microsoft Azure cloud-based AI services."}
+	azure_api_version : Optional[str] = field(
+		metadata={"help" : "Access key for Microsoft Azure LLMs."},
+		default = None
 	)
 
 class PretrainedLM(ABC):
@@ -134,7 +139,7 @@ class PretrainedLM(ABC):
     @abstractmethod
     def generate(
         self,
-        prompt : str | list[dict[str,str]],
+        prompt : str | list,
         max_new_tokens : int = 64,
         temperature : float = 0,
         top_p : float | None = None,
@@ -144,7 +149,7 @@ class PretrainedLM(ABC):
         Generate an LLM response to a given query.
 
         Args:
-            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+            prompt (str | list): The prompt for the LLM.
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
@@ -283,7 +288,7 @@ class LocalPLM(PretrainedLM):
         
         self.model, self.peft_config, self.tokenizer = model, peft_config, tokenizer
     
-    def _format_prompt(self, prompt : str | list[dict[str,str]][str,str]) -> str:
+    def _format_prompt(self, prompt : str | list[str,str]) -> str:
         """
         Convert an LLM prompt into string format with a chat template
         and special tokens.
@@ -308,7 +313,7 @@ class LocalPLM(PretrainedLM):
 
     def generate(
         self,
-        prompt : str | list[dict[str,str]],
+        prompt : str | list,
         max_new_tokens : int = 64,
         temperature : float = 0,
         top_p : float | None = None,
@@ -318,7 +323,7 @@ class LocalPLM(PretrainedLM):
         Generate an LLM response to a given query.
 
         Args:
-            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+            prompt (str | list): The prompt for the LLM.
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.
@@ -440,14 +445,14 @@ class LocalPLM(PretrainedLM):
         path = os.path.join(output_dir, "loss_history.png")
         plt.savefig( path, dpi=200, bbox_inches='tight' )
 
-class CloudLM(PretrainedLM):
+class CloudPLM(PretrainedLM):
     def __init__(self, args : CloudModelArguments):
         
         # Raise an exception if model_name is
         # not a model that LiteLLM supports
-        get_llm_provider(args.model_name)
+        get_llm_provider(args.cloud_model_name)
         
-        self.model = args.model_name
+        self.model = args.cloud_model_name
         
         # Set up API keys for model usage
         os.environ["OPENAI_API_KEY"] = args.openai_api_key
@@ -459,7 +464,7 @@ class CloudLM(PretrainedLM):
 
     def generate(
         self,
-        prompt : str | list[dict[str,str]],
+        prompt : str | list,
         max_new_tokens : int = 64,
         temperature : float = 0,
         top_p : float | None = None,
@@ -469,7 +474,7 @@ class CloudLM(PretrainedLM):
         Generate an LLM response to a given query.
 
         Args:
-            prompt (str | list[dict[str,str]]): The prompt for the LLM.
+            prompt (str | list): The prompt for the LLM.
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
                                 if you want to include a system prompt and/or prior chat history.
             max_new_tokens (int, optional): Maximum number of tokens for the model to output. Defaults to 64.

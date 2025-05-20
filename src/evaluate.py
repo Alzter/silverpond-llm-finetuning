@@ -60,7 +60,7 @@ class EvaluationConfig:
         default='system',
         metadata = {"help" : 'What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.'}
     )
-    temperature : Optional[float] = field(
+    temperature : float = field(
         default=0,
         metadata = {"help" : 'Sampling temperature to be used. Higher = greater likelihood of low probability words.'}
     )
@@ -68,7 +68,7 @@ class EvaluationConfig:
         default=None,
         metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0.'}
     )
-    out_path : Optional[str] = field(
+    out_path : str = field(
         default="results",
         metadata = {"help" : 'Which directory to save the evaluation result by default.'}
     )
@@ -701,7 +701,7 @@ def evaluate(
 
         # Get the LLM to generate an answer
         response = model.generate(
-                        prompt=prompt, model=model, tokenizer=tokenizer,
+                        prompt=prompt,
                         max_new_tokens = eval_config.max_tokens,
                         temperature=eval_config.temperature,
                         top_p=eval_config.top_p
