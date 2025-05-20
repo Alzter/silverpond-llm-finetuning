@@ -455,12 +455,12 @@ class CloudPLM(PretrainedLM):
         self.model = args.cloud_model_name
         
         # Set up API keys for model usage
-        os.environ["OPENAI_API_KEY"] = args.openai_api_key
-        os.environ["ANTHROPIC_API_KEY"] = args.anthropic_api_key
-        os.environ["HUGGINGFACE_API_KEY"] = args.huggingface_api_key
-        os.environ["AZURE_API_KEY"] = args.azure_api_key
-        os.environ["AZURE_API_BASE"] = args.azure_api_base
-        os.environ["AZURE_API_VERSION"] = args.azure_api_version
+        if args.openai_api_key: os.environ["OPENAI_API_KEY"] = args.openai_api_key
+        if args.anthropic_api_key: os.environ["ANTHROPIC_API_KEY"] = args.anthropic_api_key
+        if args.huggingface_api_key: os.environ["HUGGINGFACE_API_KEY"] = args.huggingface_api_key
+        if args.azure_api_key: os.environ["AZURE_API_KEY"] = args.azure_api_key
+        if args.azure_api_base: os.environ["AZURE_API_BASE"] = args.azure_api_base
+        if args.azure_api_version: os.environ["AZURE_API_VERSION"] = args.azure_api_version
 
     def generate(
         self,
