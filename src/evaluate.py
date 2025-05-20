@@ -103,7 +103,9 @@ class EvaluationResult:
         labels_true (dict[str, list]): List of true class IDs (int) for each sample for each label. (y_true)
         label_names (dict[str, list]): List of all class names for each label.
         llm_responses (list[str]): Raw LLM response to each sample.
+        total_tokens_per_response (list[int]): Total number of tokens for each LLM response.
         prediction_times (list[float]): How long it took the LLM to classify each sample in seconds.
+        total_tokens (int): Total number of tokens used to perform the evaluation.
         total_time_elapsed (float): How long the evaluation took to run overall in seconds.
     """
     config : EvaluationConfig
@@ -112,7 +114,9 @@ class EvaluationResult:
     labels_true : dict[str, list]
     label_names : dict[str, list]
     llm_responses : list[str]
+    total_tokens_per_response : list[int]
     prediction_times : list[float]
+    total_tokens : int
     total_time_elapsed : float
 
     @classmethod
@@ -158,7 +162,8 @@ class EvaluationResult:
         "LLM Response" : np.array(self.llm_responses),
         #"Predicted Label" : np.array(y_pred),
         #"True Label" : np.array(y_true),
-        "Prediction Time" : np.array(self.prediction_times)
+        "Prediction Time" : np.array(self.prediction_times),
+        "Total Tokens" : np.array(self.total_tokens_per_response)
         }
 
         for label in self.label_names.keys():
@@ -685,6 +690,7 @@ def evaluate(
 
     labels_pred = []
     llm_responses = []
+    total_tokens_per_response = []
 
     # Get all text inputs (X) in eval_dataset
     texts = [message[0]['content'].strip() for message in eval_dataset['messages']]
@@ -712,8 +718,10 @@ def evaluate(
                         top_p=eval_config.top_p
                     )
         
+        total_tokens_per_response.append(response.total_tokens)
+
         # Extract the class ID(s) from the LLM's answer if one exists
-        pred_classes = _get_class_ids_from_model_response(response, label_names)
+        pred_classes = _get_class_ids_from_model_response(response.text, label_names)
 
         labels_pred.append(pred_classes)
         llm_responses.append(response)
@@ -739,5 +747,7 @@ def evaluate(
         labels_true=labels_true,
         label_names=label_names,
         llm_responses=llm_responses,
+        total_tokens_per_response=total_tokens_per_response,
         prediction_times=prediction_times,
+        total_tokens=sum(total_tokens_per_response),
         total_time_elapsed=total_time_elapsed)
