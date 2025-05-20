@@ -371,6 +371,7 @@ class LocalPLM(PretrainedLM):
     def finetune(self,
         train_dataset : Dataset,
         sft_config : SFTConfig,
+        lora_config : LoraConfig | None = None,
         output_dir : str | None = None,
         eval_dataset : Dataset | None = None,
         checkpoint : bool | str | None = None
@@ -381,6 +382,7 @@ class LocalPLM(PretrainedLM):
             model (AutoModelForCausalLM): The LLM to fine-tune, which will be modified by this function. Use ``LocalPLM(LocalModelArguments)`` to instantiate.
             train_dataset (Dataset): The dataset of training samples to fine-tune the model on. You must pre-process this dataset using ``preprocess_dataset``.
             sft_config (SFTConfig): Fine-tuning training configuration, including number of epochs, checkpoints, etc.
+            lora_config (LoraConfig, optional): LoRA fine-tuning hyperparameters to use. If not given, defaults to ``self.peft_config``. Defaults to None.
             output_dir (str, optional): Where to save the fine-tuned model to. Defaults to ``sft_config.output_dir``. Defaults to None.
             eval_dataset (Dataset, optional): The dataset of training samples to validate the model on. You must pre-process this dataset using ``preprocess_dataset``. Defaults to None.
             checkpoint (bool | str, optional): If present, training will resume from the model/optimizer/scheduler states loaded here. If a ``str``, local path to a saved checkpoint as saved by a previous instance of Trainer. If a bool and equals ``True``, load the last checkpoint in ``args.output_dir`` as saved by a previous instance of Trainer.
@@ -396,8 +398,12 @@ class LocalPLM(PretrainedLM):
         if output_dir is None:
             output_dir = sft_config.output_dir
     
+        if not lora_config:
+            if self.peft_config: lora_config = self.peft_config
+            else: raise ValueError("No LoraConfig was provided to the model for finetuning.")
+
         self.model = prepare_model_for_kbit_training(self.model)
-        self.model = get_peft_model(self.model, self.peft_config)
+        self.model = get_peft_model(self.model, lora_config)
     
         trainer = SFTTrainer(
             model=self.model,
