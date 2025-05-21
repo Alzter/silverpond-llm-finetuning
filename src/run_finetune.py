@@ -51,7 +51,7 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
     subprocess.run(["nvidia-smi"])
     
     # Enable gradient checkpointing (saves memory)
-    model.config.use_cache = not training_args.gradient_checkpointing
+    model.model.config.use_cache = not training_args.gradient_checkpointing
     # training_args.gradient_checkpointing = training_args.gradient_checkpointing and not local_model_args.use_unsloth
     if training_args.gradient_checkpointing:
         training_args.gradient_checkpointing_kwargs = {"use_reentrant": local_model_args.use_reentrant}
