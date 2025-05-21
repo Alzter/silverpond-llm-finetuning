@@ -1,8 +1,8 @@
 import dataclasses
 from dataclasses import dataclass, asdict, field
-from typing import Optional
+from typing import Optional, Literal
 from datasets import Dataset
-from utils import PretrainedLM
+from utils import PretrainedLM, ModelResponse
 import os, re
 from tqdm import tqdm
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
@@ -44,7 +44,6 @@ class EvaluationConfig:
         prompt_role (str, optional): What role to give the LLM prompt. Defaults to "system", meaning a system prompt. Can be replaced with "user" for models which do not work well with system prompts.
         temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 1.
         top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
-        eval_kwargs (dict, optional): Dict of keyword arguments to pass to PretrainedLM.generate(). Defaults to {}.
         out_path (str,optional): Which directory to save the evaluation result by default. Defaults to "results".
         """
     technique_name : str = field(
@@ -69,9 +68,13 @@ class EvaluationConfig:
         default=None,
         metadata = {"help" : 'If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0.'}
     )
-    eval_kwargs : Optional[dict] = field(
-        default = {},
-        metadata = {"help" : "Dict of keyword arguments to pass to PretrainedLM.generate()."}
+    reasoning_effort : Optional[Literal["low","medium","high"]] = field(
+        default=None,
+        metadata = {"help" : "For cloud LLMs, controls the reasoning effort done by the models. For Anthropic models, reasoning efforts of 'low','medium','high' correlate to 1024,2048,4096 reasoning tokens respectively."}
+    )
+    claude_thinking_tokens : Optional[int] = field(
+        default = None,
+        metadata = {"help" : "For using Claude Sonnet 3.7 specifically - controls the number of tokens allowed for reasoning. Must be at least 1024. If set, temperature must be 1."}
     )
     out_path : str = field(
         default="results",
@@ -108,8 +111,8 @@ class EvaluationResult:
         labels_true (dict[str, list]): List of true class IDs (int) for each sample for each label. (y_true)
         label_names (dict[str, list]): List of all class names for each label.
         llm_responses (list[ModelResponse]): LLM response for each sample.
-        total_tokens (int): Total number of tokens used to perform the evaluation.
-        total_time_elapsed (float): How long the evaluation took to run overall in seconds.
+        total_tokens (int): Number of input and output tokens used to perform the evaluation.
+        total_time_elapsed (float): How long the evaluation took to run in seconds.
     """
     config : EvaluationConfig
     texts : list[str]
@@ -124,7 +127,17 @@ class EvaluationResult:
     def from_dict(cls, data_dict: dict):
         field_names = set(f.name for f in dataclasses.fields(cls))
         result = cls(**{k: v for k, v in data_dict.items() if k in field_names})
+
+        # We must parse EvaluationConfig from a dict
         result.config = EvaluationConfig.from_dict(result.config)
+        
+        llm_responses : list[ModelResponse] = []
+        # We also must parse ModelResponse objects from dicts
+        for response in result.llm_responses:
+            llm_responses.append( ModelResponse.from_dict(response) )
+        
+        result.llm_responses = llm_responses
+
         return result
     
     @classmethod
@@ -602,6 +615,13 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
                                     E.g., ``class_ids["fruit"] = 2``.
     """
 
+    # If there is no model response, return all class IDs as unknown
+    if not model_response:
+        fail_dict = {}
+        for label, class_names in label_names.items():
+            fail_dict[label] = len(class_names) - 1
+        return fail_dict
+
     if len(label_names) == 1:
         label = list(label_names.keys())[0] # Get name of first label
         label_names = list(label_names.values())[0] # Get all label values
@@ -690,19 +710,30 @@ def evaluate(
     label_names = label_names.copy() # Create a copy of label_names so we don't directly modify it
     for l in label_names.keys(): label_names[l].append("Unknown")
 
-    labels_pred = []
-    llm_responses = []
-    total_tokens_per_response = []
+    labels_pred : list[dict[str,int]] = []
+    llm_responses : list[ModelResponse] = []
+    total_tokens : int = 0
 
     # Get all text inputs (X) in eval_dataset
-    texts = [message[0]['content'].strip() for message in eval_dataset['messages']]
+    texts : list[str] = [message[0]['content'].strip() for message in eval_dataset['messages']]
 
     # Start logging how long the evaluation takes to run.
-    time_elapsed = [time.time()]
+    time_started = time.time()
+    
+    # Pass in cloud LLM reasoning parameters as kwargs
+    generation_kwargs = {}
+    
+    if eval_config.reasoning_effort is not None:
+        generation_kwargs["reasoning_effort"] = eval_config.reasoning_effort
 
+    if eval_config.claude_thinking_tokens is not None:
+        generation_kwargs["thinking"] = {"type": "enabled", "budget_tokens": eval_config.claude_thinking_tokens}
+    
     # For every sample:
     for text in tqdm(texts, "Evaluating model"):
         
+        query_time = time.time()
+
         # Generate a classification prompt for the sample
         prompt = [
             {"role":eval_config.prompt_role, "content":eval_config.prompt},
@@ -713,14 +744,27 @@ def evaluate(
             prompt.pop(0)
 
         # Get the LLM to generate an answer
-        response = model.generate(
-                        prompt=prompt,
-                        max_new_tokens = eval_config.max_tokens,
-                        temperature=eval_config.temperature,
-                        top_p=eval_config.top_p
-                    )
+        try:
+            response = model.generate(
+                prompt=prompt,
+                max_new_tokens = eval_config.max_tokens,
+                temperature=eval_config.temperature,
+                top_p=eval_config.top_p,
+                kwargs=generation_kwargs
+            )
+
+        # If something goes wrong, return an empty response
+        except Exception as e:
+            response = ModelResponse(
+               text = "",
+               prompt_tokens=0,
+               completion_tokens=0,
+               total_tokens=0,
+               latency=time.time() - query_time,
+               exception=e
+            )
         
-        total_tokens_per_response.append(response.total_tokens)
+        total_tokens += response.total_tokens
 
         # Extract the class ID(s) from the LLM's answer if one exists
         pred_classes = _get_class_ids_from_model_response(response.text, label_names)
@@ -728,14 +772,11 @@ def evaluate(
         labels_pred.append(pred_classes)
         llm_responses.append(response)
 
-        # Add each iteration to the time taken.
-        time_elapsed.append(time.time())
-
-    total_time_elapsed = time_elapsed[-1] - time_elapsed[0]
+    total_time_elapsed = time.time() - time_started 
 
     # Get all class IDs from the label(s) in eval_dataset (y_true)
-    groundtruth = [message[-1]['content'] for message in eval_dataset['messages']]
-    labels_true = [_get_class_ids_from_model_response(label, label_names) for label in groundtruth]
+    groundtruth : list[str] = [message[-1]['content'] for message in eval_dataset['messages']]
+    labels_true : list[dict[str, int]] = [_get_class_ids_from_model_response(label, label_names) for label in groundtruth]
 
     # Restructure labels from list of dicts to dict of lists
     labels_true = pd.DataFrame(labels_true).to_dict(orient='list')
@@ -748,5 +789,5 @@ def evaluate(
         labels_true=labels_true,
         label_names=label_names,
         llm_responses=llm_responses,
-        total_tokens=sum(total_tokens_per_response),
+        total_tokens=total_tokens,
         total_time_elapsed=total_time_elapsed)
