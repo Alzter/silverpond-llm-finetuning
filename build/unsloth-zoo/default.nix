@@ -24,6 +24,8 @@
   huggingface-hub,
   hf-transfer,
   cut-cross-entropy,
+  pillow,
+  protobuf
 
 }:
 
@@ -61,6 +63,8 @@ buildPythonPackage rec {
     huggingface-hub
     hf-transfer
     cut-cross-entropy
+    pillow
+    protobuf
   ];
 
   doCheck = true;

@@ -12,6 +12,8 @@
   numpy,
   torch,
   bitsandbytes,
+  pillow,
+  protobuf
 }:
 
 buildPythonPackage rec {
@@ -34,6 +36,8 @@ buildPythonPackage rec {
     numpy
     torch
     bitsandbytes
+    pillow
+    protobuf
   ];
 
   doCheck = true;

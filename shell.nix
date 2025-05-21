@@ -86,8 +86,10 @@ pkgs.mkShell {
             litellm
             tyro
             cut-cross-entropy
-            # unsloth
-            # unsloth-zoo
+            unsloth
+            unsloth-zoo
+            pillow
+            protobuf
 #             scipy
 #             einops
 #             evaluate
