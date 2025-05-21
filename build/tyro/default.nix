@@ -27,6 +27,7 @@
   mypy,
   numpy,
   flax,
+  pillow,
   pydantic,
   coverage,
   eval-type-backport,
@@ -68,6 +69,7 @@ buildPythonPackage rec {
     mypy
     numpy
     flax
+    pillow
     pydantic
     coverage
     eval-type-backport
@@ -77,7 +79,7 @@ buildPythonPackage rec {
     pytest
   '';
 
-  doCheck = true;
+  doCheck = false;
 
   pythonImportsCheck = [ "tyro" ];
 

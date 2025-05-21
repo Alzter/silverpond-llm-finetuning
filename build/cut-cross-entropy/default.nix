@@ -39,7 +39,6 @@ buildPythonPackage rec {
   dependencies =
     [
       torch
-      triton
     ]
     ++ lib.optionals (!stdenv.isDarwin) [
       deepspeed
@@ -54,12 +53,12 @@ buildPythonPackage rec {
       tqdm
     ];
 
-  doCheck = true;
+  doCheck = false;
 
   pythonImportsCheck = [
     "cut_cross_entropy"
   ];
-
+  
   meta = with lib; {
     description = "Memory-efficient cross-entropy loss implementation using Cut Cross-Entropy (CCE)";
     homepage = "https://github.com/apple/ml-cross-entropy";

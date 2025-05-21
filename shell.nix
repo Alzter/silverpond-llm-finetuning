@@ -20,11 +20,11 @@ let
                           torchvision = final_.torchvision-bin;
                           torchaudio = final_.torchaudio-bin;
                           trl = final_.callPackage ./build/trl/default.nix { };
-#                           unsloth = final_.callPackage ./build/unsloth/default.nix { };
-#                           unsloth-zoo = final_.callPackage ./build/unsloth-zoo/default.nix { };
-#                           tyro = final_.callPackage ./build/tyro/default.nix { };
-#                           cut-cross-entropy = final_.callPackage ./build/cut-cross-entropy/default.nix { };
-                        sklearn-compat = final_.buildPythonPackage rec { # Use pre-compiled version of sklearn-compat
+                          unsloth = final_.callPackage ./build/unsloth/default.nix { };
+                          unsloth-zoo = final_.callPackage ./build/unsloth-zoo/default.nix { };
+                          tyro = final_.callPackage ./build/tyro/default.nix { };
+                          cut-cross-entropy = final_.callPackage ./build/cut-cross-entropy/default.nix { };
+                          sklearn-compat = final_.buildPythonPackage rec { # Use pre-compiled version of sklearn-compat
                             pname = "sklearn_compat";
                             version = "0.1.3";
                             format = "wheel";
@@ -43,6 +43,12 @@ let
                             dependencies = imbalPrevAttrs.dependencies ++ [ final_.sklearn-compat ];
                             doCheck = false;
                           });
+                          # cut-cross-entropy = prev_.cut-cross-entropy.overrideAttrs(cutFinalAttrs: cutPrevAttrs: {
+                          #   triton = final_.torch-bin.triton;
+                            # pythonRemoveDeps = [
+                            #   "triton" # PyTorch has its own Triton
+                            # ];
+                          # });
                        };
                     };
                 }
@@ -78,10 +84,10 @@ pkgs.mkShell {
             xlrd
             imbalanced-learn
             litellm
-#             tyro
-#             cut-cross-entropy
-#             unsloth
-#             unsloth-zoo
+            tyro
+            cut-cross-entropy
+            # unsloth
+            # unsloth-zoo
 #             scipy
 #             einops
 #             evaluate
