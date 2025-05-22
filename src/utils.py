@@ -3,6 +3,7 @@ import warnings
 from abc import ABC, abstractmethod
 import dataclasses
 import json
+import math
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 from enum import Enum
@@ -483,7 +484,7 @@ class LocalPLM(PretrainedLM):
         """
         # Save the training history
         history.to_csv(os.path.join(output_dir, "loss_history.csv"), index=False)
-    
+
         # Plot the training history and save the plot
         plt.plot(history.set_index("step")["loss"])
         plt.xlabel("Epoch")
