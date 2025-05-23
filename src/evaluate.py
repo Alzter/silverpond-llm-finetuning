@@ -390,9 +390,9 @@ class EvaluationResult:
         # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
         self.save_json( os.path.join(output_dir, "raw_output.json") )
         
-        print(self.label_names)
-        print(self.labels_pred)
-        print(self.labels_true)
+        #print(self.label_names)
+        #print(self.labels_pred)
+        #print(self.labels_true)
 
         # For each label:
         for label, class_names in self.label_names.items():
@@ -614,6 +614,8 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
         class_ids (dict[str, int]): The predicted ID for each class.
                                     E.g., ``class_ids["fruit"] = 2``.
     """
+    
+    #print(model_response)
 
     # If there is no model response, return all class IDs as unknown
     if not model_response:

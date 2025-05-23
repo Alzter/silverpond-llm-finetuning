@@ -202,6 +202,9 @@ class PretrainedLM(ABC):
 
 class LocalPLM(PretrainedLM):
     def __init__(self, args : LocalModelArguments, training_args : SFTConfig | None = None):
+        
+        if args.use_unsloth and not training_args:
+            raise ValueError("When using Unsloth, training_args (SFTConfig) must be given")
 
         from transformers import set_seed
         set_seed(42) # Enable deterministic LLM output
@@ -448,8 +451,8 @@ class LocalPLM(PretrainedLM):
             if self.peft_config: lora_config = self.peft_config
             else: raise ValueError("No LoraConfig was provided to the model for finetuning.")
 
-        self.model = prepare_model_for_kbit_training(self.model)
-        self.model = get_peft_model(self.model, lora_config)
+        # self.model = prepare_model_for_kbit_training(self.model)
+        # self.model = get_peft_model(self.model, lora_config)
     
         trainer = SFTTrainer(
             model=self.model,
@@ -457,6 +460,7 @@ class LocalPLM(PretrainedLM):
             args=sft_config,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
+            peft_config=lora_config
         )
     
         trainer.train(resume_from_checkpoint=checkpoint)
