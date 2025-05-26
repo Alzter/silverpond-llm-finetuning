@@ -324,9 +324,10 @@ def sample_dataset(dataset : Dataset | DatasetDict, ratio : float | None = None,
     
     if ratio:
         size = int(dataset.num_rows * ratio)
+        size = max(size, 1)
     
-    if not size:
-        raise ValueError("Either a ratio (ratio) or number of samples (size) must be specified.")
+    if size is None:
+        raise ValueError("Either a fraction (ratio) or number of samples (size) must be specified for dataset sampling.")
 
     indices = list(range(size))
 
@@ -558,11 +559,12 @@ def load_dataset(
             dataset = pd.read_csv( dataset_name_or_path, low_memory = False )
         except Exception as e:
             raise Exception(f"Error reading CSV dataset at {dataset_name_or_path}. Error message: {str(e)}")
+        
         dataset = create_dataset_from_dataframe(dataset, text_columns=text_columns, label_columns=label_columns, test_size=test_size)
-
-    if not dataset:
-        raise Exception(f"Dataset {dataset_name_or_path} does not point to a Dataset on the HuggingFace hub or a CSV file.")
     
+    if dataset is None:
+        raise Exception(f"Dataset {dataset_name_or_path} does not point to a Dataset on the HuggingFace hub or a CSV file.")
+     
     if ratio or size:
         if ratio:
             if ratio > 1 or ratio <= 0: raise ValueError("Dataset sampling ratio must be > 0 and <= 1.")
@@ -573,7 +575,7 @@ def load_dataset(
             dataset = undersample_dataset(dataset, ratio=ratio, size=size, label_columns=label_columns)
         else:
             dataset = sample_dataset(dataset, ratio=ratio, size=size) 
-    
+
     dataset, label_names = preprocess_dataset(dataset,text_columns=text_columns,label_columns=label_columns)
 
     return dataset, label_names
