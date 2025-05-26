@@ -467,7 +467,7 @@ def create_prompt(
         prompt +=f"\nYou should output the result as {units[len(label_names.keys())]} json fields as " + "{"
         
         for name in label_names.keys():
-            prompt += f"{name} : {_sanitize_string(name)}_label, "
+            prompt += f"\"{name}\" : \"{_sanitize_string(name)}_label\", "
         
         prompt = prompt[:-2]
         prompt += "}\n"
