@@ -90,6 +90,7 @@ pkgs.mkShell {
             unsloth-zoo
             pillow
             protobuf
+            boto3
 #             scipy
 #             einops
 #             evaluate
