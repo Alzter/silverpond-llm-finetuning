@@ -109,32 +109,44 @@ class LocalModelArguments:
 
 @dataclass
 class CloudModelArguments:
-	cloud_model_name : Optional[str] = field(
+    cloud_model_name : Optional[str] = field(
         metadata = {"help" : 'If provided, loads an LLM from the cloud using LiteLLM rather than locally. Requires an API key depending on model vendor.'},
 		default = None
     )
-	openai_api_key : Optional[str] = field(
+    openai_api_key : Optional[str] = field(
 		metadata={"help" : "Access key for OpenAI LLMs."},
 		default = None
 	)
-	anthropic_api_key : Optional[str] = field(
+    anthropic_api_key : Optional[str] = field(
 		metadata={"help" : "Access key for Anthropic LLMs."},
 		default = None
 	)
-	huggingface_api_key : Optional[str] = field(
+    huggingface_api_key : Optional[str] = field(
 		metadata={"help" : "Access key for HuggingFace LLMs."},
 		default = None
 	)
-	azure_api_key : Optional[str] = field(
+    azure_api_key : Optional[str] = field(
 		metadata={"help" : "Access key for Microsoft Azure LLMs."},
 		default = None
 	)
-	azure_api_base : Optional[str] = field(
+    azure_api_base : Optional[str] = field(
 		metadata={"help" : "Access key for Microsoft Azure LLMs."},
 		default = None
 	)
-	azure_api_version : Optional[str] = field(
+    azure_api_version : Optional[str] = field(
 		metadata={"help" : "Access key for Microsoft Azure LLMs."},
+		default = None
+	)
+    aws_access_key_id : Optional[str] = field(
+		metadata={"help" : "Access key for AWS Bedrock LLMs."},
+		default = None
+	)
+    aws_secret_access_key : Optional[str] = field(
+		metadata={"help" : "Access key for AWS Bedrock LLMs."},
+		default = None
+	)
+    aws_region_name : Optional[str] = field(
+		metadata={"help" : "Access key for AWS Bedrock LLMs."},
 		default = None
 	)
 
@@ -517,6 +529,9 @@ class CloudPLM(PretrainedLM):
         if args.azure_api_key: os.environ["AZURE_API_KEY"] = args.azure_api_key
         if args.azure_api_base: os.environ["AZURE_API_BASE"] = args.azure_api_base
         if args.azure_api_version: os.environ["AZURE_API_VERSION"] = args.azure_api_version
+        if args.aws_access_key_id: os.environ["AWS_ACCESS_KEY_ID"] = args.aws_access_key_id
+        if args.aws_secret_access_key: os.environ["AWS_SECRET_ACCESS_KEY"] = args.aws_secret_access_key
+        if args.aws_region_name: os.environ["AWS_REGION_NAME"] = args.aws_region_name
 
     def generate(
         self,
