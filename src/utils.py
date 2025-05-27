@@ -104,7 +104,7 @@ class LocalModelArguments:
     )
     use_unsloth: Optional[bool] = field(
     default=False,
-        metadata={"help": "Enables UnSloth for training."},
+        metadata={"help": "Enables Unsloth for accelerated training. Only works for local LLMs being fine-tuned on a single GPU."},
     )
 
 @dataclass
@@ -524,11 +524,13 @@ class CloudPLM(PretrainedLM):
         max_new_tokens : int = 64,
         temperature : float = 0,
         top_p : float | None = None,
-        kwargs : dict = {}
+        kwargs : dict = {},
+        rate_limit_retries = 3, 
+        rate_limit_retry_delay = 60, 
         ) -> ModelResponse:
         """
         Generate an LLM response to a given query.
-
+        
         Args:
             prompt (str | list): The prompt for the LLM.
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
@@ -537,6 +539,8 @@ class CloudPLM(PretrainedLM):
             temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 0.
             top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
             kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
+            rate_limit_retries (int, optional): If the model fails to generate, retry generating a response this many times.
+            rate_limit_retry_delay (int, optional): How many seconds to wait inbetween generation attempts.
         
         Returns:
             response (str): The LLM's response.
@@ -551,30 +555,48 @@ class CloudPLM(PretrainedLM):
 
         if not type(prompt) is list: raise ValueError("Prompt must be a str or list[dict[str,str]] using chat template format (see https://huggingface.co/docs/transformers/main/en/chat_templating).")
         
-        try:
-            response = completion(
-                model=self.model,
-                messages=prompt,
-                temperature=temperature,
-                top_p=top_p,
-                max_completion_tokens=max_new_tokens,
-                **kwargs,
-                drop_params=True
-            )
-        except Exception as e:
+        response = None
+
+        for i in range(rate_limit_retries):
+            try:
+                response = completion(
+                    model=self.model,
+                    messages=prompt,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_completion_tokens=max_new_tokens,
+                    **kwargs,
+                    drop_params=True
+                )
+            except Exception as e:
+                # If we get a rate limit error,
+                # delete the response and then
+                # try calling the LLM again after
+                # a delay
+                response = None
+
+            if response is None:
+                # If we have more retries remaining, wait a delay
+                if i < rate_limit_retries - 1:
+                    warnings.warn(f"Error generating model response with LiteLLM. Retrying in {rate_limit_retry_delay} seconds. {rate_limit_retry_delay - 1 - i} attempts remaining.")
+                    time.sleep(rate_limit_retry_delay)
+
+            else:
+                break
+        
+        if response is None:
             warnings.warn(f"Error generating model response with LiteLLM. Traceback: {str(e)}")
-            # Bork catcher
             return ModelResponse(
                 text="",
                 prompt_tokens=0,completion_tokens=0,total_tokens=0,
                 latency = time.time() - time_started,
                 exception=e
             )
-        
+
         try:
             message = response.choices[0].message
         except Exception as e:
-            raise BadRequestError(f"Error generating model response. Traceback: {str(e)}")
+            raise BadRequestError(f"Error extracting model response. Traceback: {str(e)}")
         
         response_text = message.content
         reasoning_text = message.get("reasoning_content") # None if no reasoning
