@@ -341,12 +341,29 @@ class EvaluationResult:
                     #print(f"Pred Label: {pred_label}")
                     
                     examples = self._get_few_shot_examples(incorrect, label, true_label, pred_label, n=samples_per_pred_label)
-    
+                    
                     for example in examples.to_dict(orient='records'):
                         prompt += "Question:\n"
                         prompt += example["Text"]
                         prompt += "\n\nAnswer:\n"
-                        prompt += example[true_label_column]
+
+                        # Labels
+                        if len(true_label_column_names) == 1:
+                            answer = example[true_label_column]
+                        else:
+                            
+                            # Create a dict of the answer with all matching label columns
+                            selection = {}
+                            for key, value in example.items():
+                                if key in true_label_column_names:
+                                    label_name = key.lstrip("True").strip()
+
+                                    selection[label_name] = value
+                            
+                            # Convert the dict into a JSON string
+                            answer = json.dumps(selection)
+
+                        prompt += answer 
                         prompt += "\n\n"
                         
         prompt += "Question:\n"
