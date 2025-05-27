@@ -45,7 +45,7 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
     #)
     
     # model
-    model = LocalPLM(local_model_args)
+    model = LocalPLM(local_model_args, training_args=training_args)
     
     import subprocess
     subprocess.run(["nvidia-smi"])

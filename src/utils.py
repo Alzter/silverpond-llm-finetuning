@@ -102,10 +102,10 @@ class LocalModelArguments:
         default=False,
         metadata={"help": "Gradient Checkpointing param. Refer the related docs"},
     )
-    # use_unsloth: Optional[bool] = field(
-#     default=False,
-    #     metadata={"help": "Enables UnSloth for training."},
-    # )
+    use_unsloth: Optional[bool] = field(
+    default=False,
+        metadata={"help": "Enables Unsloth for accelerated training. Only works for local LLMs being fine-tuned on a single GPU."},
+    )
 
 @dataclass
 class CloudModelArguments:
@@ -201,23 +201,26 @@ class PretrainedLM(ABC):
         raise NotImplementedError()
 
 class LocalPLM(PretrainedLM):
-    def __init__(self, args : LocalModelArguments):
+    def __init__(self, args : LocalModelArguments, training_args : SFTConfig | None = None):
+        
+        if args.use_unsloth and not training_args:
+            raise ValueError("When using Unsloth, training_args (SFTConfig) must be given")
 
         from transformers import set_seed
         set_seed(42) # Enable deterministic LLM output
 
-        # if args.use_unsloth:
-        #     from unsloth import FastLanguageModel
+        if args.use_unsloth:
+            from unsloth import FastLanguageModel
         bnb_config = None
         quant_storage_dtype = None
     
-        # if (
-        #     torch.distributed.is_available()
-        #     and torch.distributed.is_initialized()
-        #     and torch.distributed.get_world_size() > 1
-        #     and args.use_unsloth
-        # ):
-        #     raise NotImplementedError("Unsloth is not supported in distributed training")
+        if (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and torch.distributed.get_world_size() > 1
+            and args.use_unsloth
+        ):
+            raise NotImplementedError("Unsloth is not supported in distributed training")
     
         if args.use_4bit_quantization:
             compute_dtype = getattr(torch, args.bnb_4bit_compute_dtype)
@@ -240,16 +243,15 @@ class LocalPLM(PretrainedLM):
             elif args.use_8bit_quantization:
                 bnb_config = BitsAndBytesConfig(load_in_8bit=args.use_8bit_quantization)
     
-        # if args.use_unsloth:
-        #     # Load model
-        #     model, _ = FastLanguageModel.from_pretrained(
-        #         model_name=args.model_name_or_path,
-        #         max_seq_length=training_args.max_seq_length,
-        #         dtype=None,
-        #         load_in_4bit=args.use_4bit_quantization,
-        #     )
-        #else:
-        if True:
+        if args.use_unsloth:
+            # Load model
+            model, _ = FastLanguageModel.from_pretrained(
+                model_name=args.model_name_or_path,
+                max_seq_length=training_args.max_seq_length,
+                dtype=None,
+                load_in_4bit=args.use_4bit_quantization,
+            )
+        else:
             torch_dtype = (
                 quant_storage_dtype if quant_storage_dtype and quant_storage_dtype.is_floating_point else torch.float32
             )
@@ -309,20 +311,20 @@ class LocalPLM(PretrainedLM):
             tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, trust_remote_code=True)
             tokenizer.pad_token = tokenizer.eos_token
     
-        # if args.use_unsloth:
-        #     # Do model patching and add fast LoRA weights
-        #     model = FastLanguageModel.get_peft_model(
-        #         model,
-        #         lora_alpha=args.lora_alpha,
-        #         lora_dropout=args.lora_dropout,
-        #         r=args.lora_r,
-        #         target_modules=args.lora_target_modules.split(",")
-        #         if args.lora_target_modules != "all-linear"
-        #         else args.lora_target_modules,
-        #         use_gradient_checkpointing=training_args.gradient_checkpointing,
-        #         random_state=training_args.seed,
-        #         max_seq_length=training_args.max_seq_length,
-        #     )
+        if args.use_unsloth:
+            # Do model patching and add fast LoRA weights
+            model = FastLanguageModel.get_peft_model(
+                model,
+                lora_alpha=args.lora_alpha,
+                lora_dropout=args.lora_dropout,
+                r=args.lora_r,
+                target_modules=args.lora_target_modules.split(",")
+                if args.lora_target_modules != "all-linear"
+                else args.lora_target_modules,
+                use_gradient_checkpointing=training_args.gradient_checkpointing,
+                random_state=training_args.seed,
+                max_seq_length=training_args.max_seq_length,
+            )
         
         self.model, self.peft_config, self.tokenizer = model, peft_config, tokenizer
     
@@ -449,8 +451,8 @@ class LocalPLM(PretrainedLM):
             if self.peft_config: lora_config = self.peft_config
             else: raise ValueError("No LoraConfig was provided to the model for finetuning.")
 
-        self.model = prepare_model_for_kbit_training(self.model)
-        self.model = get_peft_model(self.model, lora_config)
+        # self.model = prepare_model_for_kbit_training(self.model)
+        # self.model = get_peft_model(self.model, lora_config)
     
         trainer = SFTTrainer(
             model=self.model,
@@ -458,6 +460,7 @@ class LocalPLM(PretrainedLM):
             args=sft_config,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
+            peft_config=lora_config
         )
     
         trainer.train(resume_from_checkpoint=checkpoint)
@@ -521,11 +524,13 @@ class CloudPLM(PretrainedLM):
         max_new_tokens : int = 64,
         temperature : float = 0,
         top_p : float | None = None,
-        kwargs : dict = {}
+        kwargs : dict = {},
+        rate_limit_retries = 3, 
+        rate_limit_retry_delay = 60, 
         ) -> ModelResponse:
         """
         Generate an LLM response to a given query.
-
+        
         Args:
             prompt (str | list): The prompt for the LLM.
                                 You can use a string for a simple user prompt or a [chat template](https://huggingface.co/docs/transformers/main/en/chat_templating)
@@ -534,6 +539,8 @@ class CloudPLM(PretrainedLM):
             temperature (float, optional): Sampling temperature to be used. Higher = greater likelihood of low probability words. Defaults to 0.
             top_p (float, optional): If set to < 1, only the smallest set of most probable tokens with probabilities that add up to ``top_p`` or higher are kept for generation. Leave empty if temperature > 0. Defaults to None.
             kwargs (dict, optional): Additional parameters to pass into ``model.generate()``. Defaults to {}.
+            rate_limit_retries (int, optional): If the model fails to generate, retry generating a response this many times.
+            rate_limit_retry_delay (int, optional): How many seconds to wait inbetween generation attempts.
         
         Returns:
             response (str): The LLM's response.
@@ -548,30 +555,48 @@ class CloudPLM(PretrainedLM):
 
         if not type(prompt) is list: raise ValueError("Prompt must be a str or list[dict[str,str]] using chat template format (see https://huggingface.co/docs/transformers/main/en/chat_templating).")
         
-        try:
-            response = completion(
-                model=self.model,
-                messages=prompt,
-                temperature=temperature,
-                top_p=top_p,
-                max_completion_tokens=max_new_tokens,
-                **kwargs,
-                drop_params=True
-            )
-        except Exception as e:
+        response = None
+
+        for i in range(rate_limit_retries):
+            try:
+                response = completion(
+                    model=self.model,
+                    messages=prompt,
+                    temperature=temperature,
+                    top_p=top_p,
+                    max_completion_tokens=max_new_tokens,
+                    **kwargs,
+                    drop_params=True
+                )
+            except Exception as e:
+                # If we get a rate limit error,
+                # delete the response and then
+                # try calling the LLM again after
+                # a delay
+                response = None
+
+            if response is None:
+                # If we have more retries remaining, wait a delay
+                if i < rate_limit_retries - 1:
+                    warnings.warn(f"Error generating model response with LiteLLM. Retrying in {rate_limit_retry_delay} seconds. {rate_limit_retry_delay - 1 - i} attempts remaining.")
+                    time.sleep(rate_limit_retry_delay)
+
+            else:
+                break
+        
+        if response is None:
             warnings.warn(f"Error generating model response with LiteLLM. Traceback: {str(e)}")
-            # Bork catcher
             return ModelResponse(
                 text="",
                 prompt_tokens=0,completion_tokens=0,total_tokens=0,
                 latency = time.time() - time_started,
                 exception=e
             )
-        
+
         try:
             message = response.choices[0].message
         except Exception as e:
-            raise BadRequestError(f"Error generating model response. Traceback: {str(e)}")
+            raise BadRequestError(f"Error extracting model response. Traceback: {str(e)}")
         
         response_text = message.content
         reasoning_text = message.get("reasoning_content") # None if no reasoning
