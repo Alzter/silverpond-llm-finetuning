@@ -1,6 +1,10 @@
 # Dataset, model checkpoint, and result files
 data/
 
+# Unsloth
+unsloth_compiled_cache/
+*/unsloth_compiled_cache/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
