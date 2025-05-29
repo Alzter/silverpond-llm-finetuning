@@ -588,19 +588,19 @@ class CloudPLM(PretrainedLM):
                 # delete the response and then
                 # try calling the LLM again after
                 # a delay
+                warnings.warn(f"Error generating model response with LiteLLM. Traceback: {str(e)}")
                 response = None
 
             if response is None:
                 # If we have more retries remaining, wait a delay
                 if i < rate_limit_retries - 1:
-                    warnings.warn(f"Error generating model response with LiteLLM. Retrying in {rate_limit_retry_delay} seconds. {rate_limit_retry_delay - 1 - i} attempts remaining.")
+                    warnings.warn(f"Retrying in {rate_limit_retry_delay} seconds. {rate_limit_retry_delay - 1 - i} attempts remaining.")
                     time.sleep(rate_limit_retry_delay)
 
             else:
                 break
         
         if response is None:
-            warnings.warn(f"Error generating model response with LiteLLM. Traceback: {str(e)}")
             return ModelResponse(
                 text="",
                 prompt_tokens=0,completion_tokens=0,total_tokens=0,
