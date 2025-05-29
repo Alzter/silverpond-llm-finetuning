@@ -1,5 +1,10 @@
 # Dataset, model checkpoint, and result files
 data/
+result
+
+# Private Stuff
+*/eq*
+blog_post/
 
 # Unsloth
 unsloth_compiled_cache/
