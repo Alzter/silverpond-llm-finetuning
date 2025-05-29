@@ -341,12 +341,29 @@ class EvaluationResult:
                     #print(f"Pred Label: {pred_label}")
                     
                     examples = self._get_few_shot_examples(incorrect, label, true_label, pred_label, n=samples_per_pred_label)
-    
+                    
                     for example in examples.to_dict(orient='records'):
                         prompt += "Question:\n"
                         prompt += example["Text"]
                         prompt += "\n\nAnswer:\n"
-                        prompt += example[true_label_column]
+
+                        # Labels
+                        if len(true_label_column_names) == 1:
+                            answer = example[true_label_column]
+                        else:
+                            
+                            # Create a dict of the answer with all matching label columns
+                            selection = {}
+                            for key, value in example.items():
+                                if key in true_label_column_names:
+                                    label_name = key.lstrip("True").strip()
+
+                                    selection[label_name] = value
+                            
+                            # Convert the dict into a JSON string
+                            answer = json.dumps(selection)
+
+                        prompt += answer 
                         prompt += "\n\n"
                         
         prompt += "Question:\n"
@@ -390,9 +407,9 @@ class EvaluationResult:
         # Dump the EvaluationResult data as a JSON file into "<output_dir>/raw_output.json"
         self.save_json( os.path.join(output_dir, "raw_output.json") )
         
-        print(self.label_names)
-        print(self.labels_pred)
-        print(self.labels_true)
+        #print(self.label_names)
+        #print(self.labels_pred)
+        #print(self.labels_true)
 
         # For each label:
         for label, class_names in self.label_names.items():
@@ -467,7 +484,7 @@ def create_prompt(
         prompt +=f"\nYou should output the result as {units[len(label_names.keys())]} json fields as " + "{"
         
         for name in label_names.keys():
-            prompt += f"{name} : {_sanitize_string(name)}_label, "
+            prompt += f"\"{name}\" : \"{_sanitize_string(name)}_label\", "
         
         prompt = prompt[:-2]
         prompt += "}\n"
@@ -614,6 +631,8 @@ def _get_class_ids_from_model_response(model_response : str, label_names : dict)
         class_ids (dict[str, int]): The predicted ID for each class.
                                     E.g., ``class_ids["fruit"] = 2``.
     """
+    
+    #print(model_response)
 
     # If there is no model response, return all class IDs as unknown
     if not model_response:
