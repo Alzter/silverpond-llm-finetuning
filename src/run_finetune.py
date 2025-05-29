@@ -4,6 +4,7 @@ import sys
 from transformers import HfArgumentParser
 from trl import SFTConfig
 from utils import LocalModelArguments, DatasetArguments
+from datasets import DatasetDict
 
 #os.environ["CUDA_VISIBLE_DEVICES"] = "1" 
 
@@ -58,8 +59,8 @@ def main(local_model_args : LocalModelArguments, data_args : DatasetArguments, t
     
     # Finetune the model
     trainer, history = model.finetune(
-        train_dataset=dataset['train'],
-        eval_dataset=dataset['test'],
+        train_dataset=dataset['train'] if type(dataset) is DatasetDict else dataset,
+        eval_dataset=dataset['test'] if type(dataset) is DatasetDict else None,
         sft_config=training_args,
         checkpoint=training_args.resume_from_checkpoint
     )
