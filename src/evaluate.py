@@ -125,6 +125,32 @@ class EvaluationResult:
 
     @classmethod
     def from_dict(cls, data_dict: dict):
+
+        # Compatibility for previous versions of this class
+        # -----------------------------------------------------------------
+        # Add missing field for tokens
+        if not data.get("total_tokens"):
+            data["total_tokens"] = 0
+
+        # Rename name -> technique_name
+        if data["config"].get("name"):
+            data["config"]["technique_name"] = data["config"]["name"]
+
+        # Ensure all LLM responses are of type ModelResponse, formerly they were raw strings
+        if type(data["llm_responses"][0]) is str:
+            responses = []
+            for response in data["llm_responses"]:
+                responses.append( ModelResponse(response, 0, 0, 0, 0).to_dict() )
+            data["llm_responses"] = responses
+
+        # Multi-task support - all answers should be dicts
+        if type(data["label_names"]) is list:
+            data["label_names"] = {"label" : data["label_names"]}
+            data["labels_pred"] = {"label" : data["labels_pred"]}
+            data["labels_true"] = {"label" : data["labels_true"]}
+
+        # -----------------------------------------------------------------
+
         field_names = set(f.name for f in dataclasses.fields(cls))
         result = cls(**{k: v for k, v in data_dict.items() if k in field_names})
 
@@ -153,12 +179,31 @@ class EvaluationResult:
         with open( path, "w", encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
-    def get_answers(self, incorrect_only : bool = False) -> pd.DataFrame:
+    def get_answer_indices(self, answers : DataFrame | None = None, incorrect_only : bool = False, correct_only : bool = False) -> list:
+        if answers is None:
+            answers = self.get_answers()
+
+        if not correct_only and not incorrect_only:
+            return answers.index.tolist()
+
+        indices = False
+        for label in self.label_names.keys():
+            if correct_only:
+                indices |= answers[f"Predicted {label}"] == answers[f"True {label}"]
+            elif incorrect_only:
+                indices |= answers[f"Predicted {label}"] != answers[f"True {label}"]
+
+        indices = answers[indices].index
+
+        return indices.tolist()
+
+    def get_answers(self, incorrect_only : bool = False, correct_only : bool = False) -> pd.DataFrame:
         """
         Given raw LLM text classification evaluation data, return a DataFrame of the LLM's answers to each sample in human-readable format.
 
         Args:
             incorrect_only (bool, optional): Whether to only include the LLM's incorrect answers. Defaults to False.
+            correct_only (bool, optional): Whether to only include the LLM's correct answers. Defaults to False.
 
         Returns:
             pd.DataFrame: A table containing each sample in the evaluation dataset, the LLM's response to each sample, and the predicted/actual labels.
@@ -186,12 +231,8 @@ class EvaluationResult:
             answers[f"True {label}"] = y_true[label]
 
         answers = pd.DataFrame(answers)
-
-        if incorrect_only:
-            incorrect = False
-            for label in self.label_names.keys():
-                incorrect |= answers[f"Predicted {label}"] != answers[f"True {label}"]
-            answers = answers[incorrect]
+        if incorrect_only: answers = answers.iloc[self.get_answer_indices(answers, incorrect_only=True)]
+        if correct_only: answers = answers.iloc[self.get_answer_indices(answers, correct_only=True)]
 
         return answers
     
