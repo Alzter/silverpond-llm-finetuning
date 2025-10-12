@@ -129,25 +129,25 @@ class EvaluationResult:
         # Compatibility for previous versions of this class
         # -----------------------------------------------------------------
         # Add missing field for tokens
-        if not data.get("total_tokens"):
-            data["total_tokens"] = 0
+        if not data_dict.get("total_tokens"):
+            data_dict["total_tokens"] = 0
 
         # Rename name -> technique_name
-        if data["config"].get("name"):
-            data["config"]["technique_name"] = data["config"]["name"]
+        if data_dict["config"].get("name"):
+            data_dict["config"]["technique_name"] = data_dict["config"]["name"]
 
         # Ensure all LLM responses are of type ModelResponse, formerly they were raw strings
-        if type(data["llm_responses"][0]) is str:
+        if type(data_dict["llm_responses"][0]) is str:
             responses = []
-            for response in data["llm_responses"]:
+            for response in data_dict["llm_responses"]:
                 responses.append( ModelResponse(response, 0, 0, 0, 0).to_dict() )
-            data["llm_responses"] = responses
+            data_dict["llm_responses"] = responses
 
         # Multi-task support - all answers should be dicts
-        if type(data["label_names"]) is list:
-            data["label_names"] = {"label" : data["label_names"]}
-            data["labels_pred"] = {"label" : data["labels_pred"]}
-            data["labels_true"] = {"label" : data["labels_true"]}
+        if type(data_dict["label_names"]) is list:
+            data_dict["label_names"] = {"label" : data_dict["label_names"]}
+            data_dict["labels_pred"] = {"label" : data_dict["labels_pred"]}
+            data_dict["labels_true"] = {"label" : data_dict["labels_true"]}
 
         # -----------------------------------------------------------------
 
